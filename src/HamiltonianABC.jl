@@ -1,5 +1,7 @@
 module HamiltonianABC
 
-# package code goes here
+include("interface.jl")
+include("state.jl")
+include("mcmc.jl")
 
 end # module
