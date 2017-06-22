@@ -44,15 +44,13 @@ simulate_ϵ(pp::ToyExponentialProblem) = rand(pp.M)
 
 generate_x(pp::ToyExponentialProblem, θ, ϵ) = quantile.(Exponential(get_λ(θ)), ϵ)
 
-estimate_ϕ(pp::ToyExponentialProblem, x) = mean_and_std(x; corrected = false)
+estimate_ϕ(pp::ToyExponentialProblem, x) = mean_and_var(x; corrected = false)
 
 data_loglikelihood(pp::ToyExponentialProblem, ϕ) = sum(logpdf.(Normal(ϕ...), pp.y))
 
-function analytical_posterior(pp::ToyExponentialProblem)
+function analytical_distribution(p::ToyExponentialProblem)
     @unpack y, A, B = pp
-    N = length(y)
-    S = sum(y)
-    f(λ) = (1/λ)^N * exp(-S/λ)
-    C, _ = hquadrature(f, pp.A, pp.B)
-    λ -> f(λ)/C
+    Truncated(InverseGamma(length(y),sum(y)), A, B)
 end
+
+analytical_posterior(p) = (dist = analytical_distribution(p); x->pdf(dist, x))
