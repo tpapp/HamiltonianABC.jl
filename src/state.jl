@@ -40,7 +40,10 @@ function logposterior(problem, state::SimulatedState, θ)
 end
 
 """
-Simulate a `state` of `problem` with parameters `θ` and noise `ϵ`.
+    simulate_state(problem, θ[, ϵ])
+
+Generate a state for `problem` with parameters `θ`. `ϵ` is used when
+provided, otherwise it is simulated.
 """
 function simulate_state(problem, θ, ϵ = simulate_ϵ(problem))
     SimulatedState(θ, ϵ, calculate_posterior(problem, θ, ϵ))

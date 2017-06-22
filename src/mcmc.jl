@@ -31,6 +31,8 @@ struct RWMH{S <: AbstractMatrix}
 end
 
 """
+    propose(transition, problem, state)
+
 Generate a Metropolis-Hastings proposal using the given `transition`
 algorithm and `problem`, starting from `state`.
 
@@ -44,10 +46,16 @@ function propose(transition::RWMH, problem, state)
 end
 
 """
+    mcmc(transition, problem, state, N)
+
 Runs a Markov Chain Monte Carlo algorithm by calling [`propose`](@ref)
 repeatedly `N` times.
 
 Return the vector of states, and the average acceptance rate.
+
+The following interface needs to be supported by the arguments:
+`get_θ(state)`, `logposterior(problem, state[, θ])`,
+`simulate_state(problem, θ′)`.
 """
 function mcmc{T}(transition, problem, state::T, N)
     chain = Vector{T}(N)
