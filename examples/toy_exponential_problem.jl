@@ -49,7 +49,7 @@ estimate_ϕ(pp::ToyExponentialProblem, x) = mean_and_var(x; corrected = false)
 data_loglikelihood(pp::ToyExponentialProblem, ϕ) = sum(logpdf.(Normal(ϕ...), pp.y))
 
 function analytical_distribution(p::ToyExponentialProblem)
-    @unpack y, A, B = pp
+    @unpack y, A, B = p
     Truncated(InverseGamma(length(y),sum(y)), A, B)
 end
 
