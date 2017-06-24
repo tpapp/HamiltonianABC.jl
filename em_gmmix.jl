@@ -71,7 +71,7 @@ mixture of normals is "close enough" or not, graphically
 """
 function plotting_mixture(x_grid,tru_,estim_)
     "plotting the true density"
-    plot(x_grid,tru_[2])
+    plot(x_grid,tru_)
     "plotting the approximated density"
-    plot!(x_grid,estim_[2])
+    plot!(x_grid,estim_)
 end
