@@ -60,7 +60,7 @@ function limit_posterior(p::ToyExponentialModel)
     @unpack y, A, B = p
     N = length(y)
     ℓ(λ) = -N*log(λ) - sum((y./λ-1).^2)/2 # log posterior
-    normalized_density(ℓ, mean(y), A, B)
+    exp ∘ normalize_logdensity(ℓ, mean(y), A, B)
 end
                    
 @testset "toy exponential limit" begin
@@ -75,7 +75,7 @@ end
 
     @test mean(λs) ≈ mean(p.y) rtol = 0.15
     
-    test_cdf(limit_posterior(p), λs, p.A)
+    test_cdf(pdf2cdf(limit_posterior(p), p.A), λs)
 end
 
 @testset "toy exponential 10x replication" begin
@@ -87,5 +87,5 @@ end
 
     @test mean(λs) ≈ mean(p.y) rtol = 0.15
     
-    test_cdf(limit_posterior(p), λs, p.A; atol = 0.1)
+    test_cdf(pdf2cdf(limit_posterior(p), p.A), λs; atol = 0.1)
 end

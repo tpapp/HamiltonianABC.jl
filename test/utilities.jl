@@ -17,9 +17,9 @@ logdensity(dw::DensityWrapper, θ) = dw.ℓ(θ)
 simulate!(::DensityWrapper) = nothing
 
 """
-    normalized_density(logdensity, x, xmin, xmax)
+    normalize_logdensity(logdensity, x, xmin, xmax)
 
-Return a density function from an unnormalize `logdensity`.
+Return a logdensity function from an unnormalized `logdensity`.
 
 `x` should be a point where the density had a value that is not far
 form the typical region (eg the mode or the mean will be fine). This
@@ -28,24 +28,28 @@ better accuracy.
 
 `xmin` and `xmax` are integration bounds.
 """
-function normalized_density(logdensity, x, xmin, xmax)
+function normalize_logdensity(logdensity, x, xmin, xmax)
     c = logdensity(x)
     C, _ = hquadrature(x -> exp(logdensity(x)-c), xmin, xmax)
     c += log(C)
-    x -> exp(logdensity(x)-c)
+    x -> logdensity(x)-c
 end
 
-"""
-    test_cdf(density, xs, xmin[; ps, atol])
+pdf2cdf(pdf, xmin) =  x ->  hquadrature(pdf, xmin, x)[1]
 
-Compare the random values `xs` to the given `density` function, which
-has support srting at `xmin`. Comparison is made at `ps`, with
-absolute tolerance `atol` (in probability space). Useful for testing
-distributions.
 """
-function test_cdf(density, xs, xmin; ps = 0.1:0.1:0.9, atol = 0.05)
+    test_cdf(density, xs[; ps, atol])
+
+Compare the random values `xs` to the given `cdf` (cumulative density)
+function. Comparison is made at `ps`, with absolute tolerance `atol`
+(in probability space). Useful for testing distributions.
+"""
+function test_cdf(cdf, xs; ps = 0.1:0.1:0.9, atol = 0.05)
     for (p, x) in zip(ps, quantile(xs, ps))
-        p′, _ = hquadrature(density, xmin, x)
-        @test p ≈ p′ atol = atol
+        @test p ≈ cdf(x) atol = atol
     end
+end
+
+function test_cdf(dist::Distribution{Univariate, Continuous}, xs; args...)
+    test_cdf(x ->  cdf(dist, x), xs; args...)
 end

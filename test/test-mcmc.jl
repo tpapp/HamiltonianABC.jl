@@ -33,7 +33,5 @@ end
     xs = exp.(first.(chain))
 
     @test mean(xs) ≈ mean(dist) atol = 0.2
-    for q in 0.1:0.1:0.9
-        @test quantile(xs, q) ≈ quantile(dist, q) atol = 0.2
-    end
+    test_cdf(dist, xs; ps = 0.1:0.1:0.9, atol = 0.2)
 end
