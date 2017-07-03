@@ -81,7 +81,7 @@ function normal_mixture_EM_posterior!(μs, σs, weights, hs, x)
             hs[t, k] = weights[k] * pdf(dist, x[t])
         end
     end
-    mix_likelihood = sum(log(hs))
+    mix_likelihood = sum(log(sum(hs, 2)))
     broadcast!(/, hs, hs, sum(hs, 2))
     return(mix_likelihood)
 end
