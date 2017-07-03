@@ -41,7 +41,7 @@ function normal_mixture(μs, σs, weights)
     dd = MixtureModel(collect(map((m, v) -> Normal(m, v), μs, σs)), [weights...])
 end
 
-normal_mixture((5.2,3.7,12.3), (0.4,1.1,4.3), (0.3,0.2,0.5))
+
 
 
 
