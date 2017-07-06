@@ -68,7 +68,8 @@ observation `i`.
 """
 function normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
     N, K = size(hs)
-    # @argcheck n == length(μs) == length(σs) == length(ws)
+    @argcheck K == length(μs) && K == length(σs) && K == length(ws)
+    @argcheck (N == length(xs))
     for j in 1:K
         h = @view hs[:, j]
         ∑h = sum(h)
