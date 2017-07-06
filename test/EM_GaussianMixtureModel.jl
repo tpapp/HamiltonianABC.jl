@@ -5,6 +5,8 @@ using Parameters
 using Roots
 using HamiltonianABC
 
+using ArgCheck
+
 """
 I am following the notations of Wikipedia while implementing the Expectation-Maximization algortihm of Mixture of Normals
 link: https://en.wikipedia.org/wiki/Mixture_model#Expectation_maximization_.28EM.29
@@ -58,21 +60,44 @@ end
 """
     normal_mixture_EM_parameters!(μs, σs, weights, hs, x)
 
-Update the parameters 'μs','σs' and 'weigths' of the Gaussian Mixture Model
-using the Expectation Maximization algorithm
-"""
+Maximization step. Update the parameters 'μs','σs' and 'weigths',
+given the posterior probabilities `hs` and data `x`.
 
-function normal_mixture_EM_parameters!(μs, σs, weights, hs, x)
-    # updating the parameters based on the probability matrix hs
-    for ll in 1:length(μs)
-        sum_col = sum(hs[:, ll])
-        weights[ll] = mean(hs, 1)[ll]
-        μs[ll] = sum(hs[:, ll].* x) / sum_col
-        σs[ll] = √(sum(hs[:, ll].* (x.-μs[ll]).^ 2) / sum_col)
+`hs[i,j]` is the posterior probability of component `i` for
+observation `j`.
+"""
+function normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
+    m, n = size(hs)
+    # @argcheck n == length(μs) == length(σs) == length(ws)
+    for i in 1:n
+        h = @view hs[:, i]
+        ∑h = sum(h)
+        ws[i] = ∑h / m
+        μs[i] = dot(xs, h) / ∑h
+        σs[i] = √(sum(h .* (xs - μs[i]).^2) / ∑h)
     end
-    μs, σs, weights
+    μs, σs, ws
 end
 
+@testset "not mixture" begin
+    ## testing the normal_mixture_EM_parameters. If the input hs matrix
+    ## contains ones in one column and zeros in the others, then it should
+    ## give back the actual distribution'
+
+    # building hs with 1s in the first column and zeros in the others
+    hs = [ones(1000) zeros(1000, 2)]
+    # drawing normally distributed numbers
+    xs = rand(Normal(1.2, 0.4), 1000)
+    μs = zeros(3)
+    σs = zeros(3)
+    ws = zeros(3)
+    # estimating the parameters
+    normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
+    # density with estimated parameters
+    @test ws[1] == 1
+    @test mean(xs) ≈ μs[1]
+    @test std(xs, corrected = false) ≈ σs[1]
+end
 
 
 """

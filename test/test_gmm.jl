@@ -3,27 +3,6 @@
 ###############################################################################
 
 
-###############################################################################
-## testing the normal_mixture_EM_parameters                                  ##
-###############################################################################
-
-# If the input hs matrix contains ones in one column and zeros in the pthers, then
-it should give back the actual distribution'
-
-@testset "not mixture" begin
-    # building hs with 1s in the first column and zeros in the others
-    rh = zeros(1000, 2)
-    lh = ones(1000)
-    hh = [lh rh]
-    # drawing normally distributed numbers
-    ww = rand(Normal(1.2, 0.4), 1000)
-    # estimating the parameters
-    parameter = normal_mixture_EM_parameters!([3.2, 1.7, 2.3], [0.9, 0.4, 2.3], [0.3, 0.2, 0.5], hh, ww)
-    # density with estimated parameters
-    mean(ww) ≈ parameter[1][1]
-    std(ww, corrected = false) ≈ parameter[2][1]
-end
-
 ################################################################################
 ## testing the normal_mixture_EM_posterior                                    ##
 ################################################################################
