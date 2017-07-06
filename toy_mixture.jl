@@ -42,7 +42,7 @@ function logdensity(pp::ToyQuantProblem, θ)
     z = quantile.(Normal(0, 1), ϵ)
     X = normal_gk_quant.(z, θ...)
 
-    params_quant = normal_mixture_EMM(X, mix)
+    params_quant = normal_mixture_EMM(X, mix, tol)
 
     loglikelihood = normal_mixture_EM_posterior!(params_quant[2], params_quant[3], params_quant[4], params_quant[5], y)
 
