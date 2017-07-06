@@ -40,7 +40,7 @@ function logdensity(pp::ToyQuantProblem, θ)
     logprior = logpdf(Uniform(Al, Au), θ[1]) + logpdf(Uniform(Bl, Bu), θ[2]) + logpdf(Uniform(Gl, Gu), θ[3]) + logpdf(Uniform(Kl, Ku), θ[4])
 
     z = quantile.(Normal(0, 1), ϵ)
-    X = normal_gk_quant.(z, Θ...)
+    X = normal_gk_quant.(z, θ...)
 
     params_quant = normal_mixture_EMM(X, mix)
 
