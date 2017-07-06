@@ -102,24 +102,38 @@ end
 
 
 """
-    normal_mixture_EM_posterior!(μs,σs,weights,hs,x)
+    normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
 
-Update the 'hs' matrix given the parameters 'μs','σs' and 'weigths' of the Gaussian Mixture Model.
+Expectation step: update the `hs` matrix given the parameters `μs`,
+`σs` and `ws` of the Gaussian Mixture Model. See
+`normal_mixture_EM_parameters` for variable name and index
+conventions.
 
-Using the Expectation Maximization algorithm the hs matrix contains the posterior probabilities.
-Return the logpdf of the Mixture Model.
+Return the (marginalized) log likelihood of the mixture model.
 """
-
-function normal_mixture_EM_posterior!(μs, σs, weights, hs, x)
-    for k in 1:length(μs)
-        dist = Normal(μs[k],σs[k])
-        for t in 1:length(x)
-            hs[t, k] = weights[k] * pdf(dist, x[t])
-        end
+function normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
+    N, K = size(hs)
+    @argcheck K == length(μs) && K == length(σs) && K == length(ws)
+    @argcheck N == length(xs)
+    for k in 1:K
+        hs[:, k] .= ws[k] * pdf.(Normal(μs[k], σs[k]), xs)
     end
     mix_likelihood = sum(log.(sum(hs, 2)))
-    broadcast!(/, hs, hs, sum(hs, 2))
-    return(mix_likelihood)
+    hs .= hs ./ sum(hs, 2)
+    mix_likelihood
+end
+
+@testset "testing posterior probabilities" begin
+    # Testing the normal_mixture_EM_posterior with a *one* mixture normal.
+    # It should give back hs with 1s.
+
+    # starting with hs = zeros
+    hs = zeros(100, 1)
+    # the function updates the hs matrix
+    normal_mixture_EM_posterior!([1.2], [0.5], [1.0], hs,
+                                 rand(Normal(1.0, 0.2), 100))
+    # testing whether we got back a vector of ones or not
+    @test hs == ones(length(hs))
 end
 
 

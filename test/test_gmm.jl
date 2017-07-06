@@ -4,20 +4,6 @@
 
 
 ################################################################################
-## testing the normal_mixture_EM_posterior                                    ##
-################################################################################
-
-# Testing the function with a *one* mixture normal. It should give back hs with 1s.
-
-@testset "testing posterior probabilities" begin
-    # starting with hs = zeros
-    hs = zeros(100)
-    # the function updates the hs matrix
-    normal_mixture_EM_posterior!([1.2],[0.5],[1.0], hs, rand(Normal(1.0, 0.2), 100))
-    # testing whether we got back a vector of ones or not
-    hs ≈ ones(length(hs))
-end
-################################################################################
 ## testing the normal_mixture_EMM function                                    ##
 ################################################################################
 # The function should converge to the real parameters of the true of normal model,which is not a mixture
