@@ -63,18 +63,18 @@ end
 Maximization step. Update the parameters 'μs','σs' and 'weigths',
 given the posterior probabilities `hs` and data `x`.
 
-`hs[i,j]` is the posterior probability of component `i` for
-observation `j`.
+`hs[i, j]` is the posterior probability of component `j` for
+observation `i`.
 """
 function normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
-    m, n = size(hs)
+    N, K = size(hs)
     # @argcheck n == length(μs) == length(σs) == length(ws)
-    for i in 1:n
-        h = @view hs[:, i]
+    for j in 1:K
+        h = @view hs[:, j]
         ∑h = sum(h)
-        ws[i] = ∑h / m
-        μs[i] = dot(xs, h) / ∑h
-        σs[i] = √(sum(h .* (xs - μs[i]).^2) / ∑h)
+        ws[j] = ∑h / N
+        μs[j] = dot(xs, h) / ∑h
+        σs[j] = √(sum(h .* (xs - μs[j]).^2) / ∑h)
     end
     μs, σs, ws
 end
