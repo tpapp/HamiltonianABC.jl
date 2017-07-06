@@ -36,15 +36,22 @@ end
 """
     normal_mixture(μs, σs, weights)
 
-Generate a mixture of normals with means 'μs', st. deviations 'σs'
+Generate a mixture of normals with means 'μs', st. deviations `σs`
 with probabilities 'weights'
 """
-
 function normal_mixture(μs, σs, weights)
     # mixture of normals model
     p = sortperm([μs...])
     μs, σs, weights = μs[p], σs[p], weights[p]
-    dd = MixtureModel(collect(map((m, v) -> Normal(m, v), μs, σs)), [weights...])
+    MixtureModel(Normal.(μs, σs), weights)
+end
+
+@testset "normal_mixture" begin
+    μs = 1:3
+    σs = fill(1, 3)
+    weights = [0.1, 0.2, 0.7]
+    simulated_mean = mean(rand(normal_mixture(μs, σs, weights), 10000))
+    @test simulated_mean ≈ dot(μs, weights) atol = 0.1
 end
 
 
