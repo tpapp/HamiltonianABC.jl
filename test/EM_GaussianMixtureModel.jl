@@ -12,21 +12,27 @@ link: https://en.wikipedia.org/wiki/Mixture_model#Expectation_maximization_.28EM
 
 
 """
-    unit_row_matrix(n,m)
+    unit_row_matrix(n, m)
 
 Facilitator function, generates an nxm matrix, whose rows sum up to 1.
 """
 
-function unit_row_matrix(n,m)
-    MM = rand(n, m)
-    for i in 1:n
-        b = sum(MM[i, :])
-        for j in 1:m
-            MM[i, j] = MM[i, j] / b
-        end
-    end
-    MM
+function unit_row_matrix(n, m)
+    M = rand(n, m)
+    M .= M ./ sum(M, 2)
+    M
 end
+
+@testset "unit row matrix" begin
+    for _ in 1:10
+        n, m = rand(3:10, 2)
+        M = unit_row_matrix(n, m)
+        @test size(M) == (n, m)
+        @test sum(M, 2) ≈ ones(n)
+        @test all(M .≥ 0)
+    end
+end
+
 """
     normal_mixture(μs, σs, weights)
 
