@@ -100,13 +100,12 @@ end
     @test std(xs, corrected = false) ≈ σs[1]
 end
 
-
 """
     normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
 
 Expectation step: update the `hs` matrix given the parameters `μs`,
 `σs` and `ws` of the Gaussian Mixture Model. See
-`normal_mixture_EM_parameters` for variable name and index
+`normal_mixture_EM_parameters!` for variable name and index
 conventions.
 
 Return the (marginalized) log likelihood of the mixture model.
@@ -118,8 +117,9 @@ function normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
     for k in 1:K
         hs[:, k] .= ws[k] * pdf.(Normal(μs[k], σs[k]), xs)
     end
-    mix_likelihood = sum(log.(sum(hs, 2)))
-    hs .= hs ./ sum(hs, 2)
+    row_sums = sum(hs, 2)
+    mix_likelihood = sum(log.(row_sums))
+    hs .= hs ./ row_sums
     mix_likelihood
 end
 
@@ -129,11 +129,12 @@ end
 
     # starting with hs = zeros
     hs = zeros(100, 1)
+    xs = rand(Normal(1.0, 0.2), 100)
     # the function updates the hs matrix
-    normal_mixture_EM_posterior!([1.2], [0.5], [1.0], hs,
-                                 rand(Normal(1.0, 0.2), 100))
+    ℓ = normal_mixture_EM_posterior!([1.2], [0.5], [1.0], hs, xs)
     # testing whether we got back a vector of ones or not
-    @test hs == ones(length(hs))
+    @test hs == ones(length(hs), 1)
+    @test ℓ ≈ sum(logpdf.(Normal(1.2, 0.5), xs))
 end
 
 
