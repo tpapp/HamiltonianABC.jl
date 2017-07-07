@@ -1,17 +1,9 @@
 using Distributions
-using Plots
-Plots.gr()
 using Parameters
-using Roots
-using HamiltonianABC
+using Base.Test
+using StatsBase
 
 using ArgCheck
-
-"""
-I am following the notations of Wikipedia while implementing the Expectation-Maximization algortihm of Mixture of Normals
-link: https://en.wikipedia.org/wiki/Mixture_model#Expectation_maximization_.28EM.29
-"""
-
 
 """
     unit_row_matrix(n, m)
@@ -139,7 +131,11 @@ end
 function normal_mixture_crude_init(K, xs)
     N = length(xs)
     μ, σ = mean_and_std(xs)
-    μs = collect(μ + σ * linspace(-1, 1, K))
+    if K == 1
+        μs = [μ]
+    else
+        μs = collect(μ + σ * linspace(-1, 1, K))
+    end
     σs = fill(σ, K)
     ws = fill(1/K, K)
     hs = Array{Float64}(N, K)
@@ -164,36 +160,54 @@ end
 end
 
 """
-    normal_mixture_EMM(x, m, max_step=1000, tol=eps())
+    normal_mixture_EM(xs, K; max_step=1000, tol=√eps())
 
-Take in the observed data 'x' and , return the approximated parameters.
-Take in the observed data points 'x', the number of the normal mixture 'm', the maximum number of iteration steps, return the approximated parameters.
+Given observations `xs`, estimate a mixture of `K` normals.
 
-The function uses the Expectation Maximization algorithm  to update the parameters of
-the Gaussian Mixture Model, namely 'μs, σs and the weights'
-the function also gives back the loglikelihood of the Mixture Model with
-the updated parameters.
+Do at most `max_step` iterations. Convergence stops when the
+log-likelihood increases by less than `tol`.
+
+Return `ℓ, μs, σs, ws, hs, step`, where ℓ is the log likelihood
+
+Implem
+
+The function uses the Expectation Maximization algorithm to update the
+parameters of the Gaussian Mixture Model, namely 'μs, σs and the
+weights' the function also gives back the loglikelihood of the Mixture
+Model with the updated parameters.
 """
-
-function normal_mixture_EMM(x, m, max_step = 1000, tol = eps())
-    ℓ = NaN
-    step = 1
-    n = length(x)
-    # initialize the parameters
-    hs = unit_row_matrix(n, m)
-    μs = fill(mean(x), m)
-    σs = fill(std(x, corrected = false), m)
-    weights = fill(1 / m, m)
-    while step ≤ max_step
-        normal_mixture_EM_parameters!(μs, σs, weights, hs, x)
-        ℓ′ = normal_mixture_EM_posterior!(μs, σs, weights, hs, x)
-        Δ, ℓ = abs(ℓ′ - ℓ), ℓ′
-        if Δ ≤ tol
+function normal_mixture_EM(xs, K; max_step = 1000, tol = eps())
+    μs, σs, ws, hs, ℓ = normal_mixture_crude_init(K, xs)
+    for step in 1:max_step
+        normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
+        ℓ′ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
+        ℓ′ < ℓ && warn("decreasing likelihood, this should not happen")
+        if ℓ′-ℓ ≤ tol
+            p = sortperm(μs)
+            return ℓ, μs[p], σs[p], ws[p], hs, step
             break
         end
-        step += 1
+        ℓ = ℓ′
     end
-    p = sortperm([μs...])
-    μs, σs, weights = μs[p], σs[p], weights[p]
-    ℓ, μs, σs, weights, hs, step
+end
+
+@testset "one-component mixture of normal EM" begin
+    xs = rand(Normal(2.5, 0.8), 10000) # just one component, K = 1
+    ℓ, μs, σs, ws, hs, iter = normal_mixture_EM(xs, 1)
+    @test mean(xs) ≈ μs[1]
+    @test std(xs, corrected = false) ≈ σs[1]
+    @test iter ≤ 5             # should get there quickly, no updates to hs
+end
+
+@testset "mixture of normal EM" begin
+    # generating the real mixture density
+    μs = [1.2, 3.7, 12.3]
+    σs = [0.4, 1.1, 4.3]
+    ws = [0.3, 0.1, 0.6]
+    xs = rand(normal_mixture(μs, σs, ws), 100000)
+    ℓ, μe, σe, we, _, iter = normal_mixture_EM(xs, 3)
+    @test norm(μs-μe, 1) ≤ 0.1
+    @test norm(σs-σe, 1) ≤ 0.1
+    @test norm(ws-we) ≤ 0.1
+    @test iter < 500
 end
