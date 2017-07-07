@@ -160,31 +160,32 @@ end
 end
 
 """
-    normal_mixture_EM(xs, K; max_step=1000, tol=√eps())
+    normal_mixture_EM(xs, K; maxiter = 1000, tol=√eps())
 
 Given observations `xs`, estimate a mixture of `K` normals.
 
-Do at most `max_step` iterations. Convergence stops when the
+Do at most `maxiter` iterations. Convergence stops when the
 log-likelihood increases by less than `tol`.
 
-Return `ℓ, μs, σs, ws, hs, step`, where ℓ is the log likelihood
+Return `ℓ, μs, σs, ws, hs, iter`, where ℓ is the log likelihood
 
-Implem
+Implementing the algorithm as described in 
+[[https://en.wikipedia.org/wiki/Mixture_model#Expectation_maximization_.28EM.29]].
 
 The function uses the Expectation Maximization algorithm to update the
 parameters of the Gaussian Mixture Model, namely 'μs, σs and the
 weights' the function also gives back the loglikelihood of the Mixture
 Model with the updated parameters.
 """
-function normal_mixture_EM(xs, K; max_step = 1000, tol = eps())
+function normal_mixture_EM(xs, K; maxiter = 1000, tol = eps())
     μs, σs, ws, hs, ℓ = normal_mixture_crude_init(K, xs)
-    for step in 1:max_step
+    for iter in 1:maxiter
         normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
         ℓ′ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
         ℓ′ < ℓ && warn("decreasing likelihood, this should not happen")
         if ℓ′-ℓ ≤ tol
             p = sortperm(μs)
-            return ℓ, μs[p], σs[p], ws[p], hs, step
+            return ℓ, μs[p], σs[p], ws[p], hs, iter
             break
         end
         ℓ = ℓ′
