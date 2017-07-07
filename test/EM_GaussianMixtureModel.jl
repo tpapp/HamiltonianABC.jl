@@ -56,7 +56,6 @@ end
     @test simulated_mean ≈ dot(μs, weights) atol = 0.1
 end
 
-
 """
     normal_mixture_EM_parameters!(μs, σs, weights, hs, x)
 
@@ -137,6 +136,32 @@ end
     @test ℓ ≈ sum(logpdf.(Normal(1.2, 0.5), xs))
 end
 
+function normal_mixture_crude_init(K, xs)
+    N = length(xs)
+    μ, σ = mean_and_std(xs)
+    μs = collect(μ + σ * linspace(-1, 1, K))
+    σs = fill(σ, K)
+    ws = fill(1/K, K)
+    hs = Array{Float64}(N, K)
+    ℓ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
+    μs, σs, ws, hs, ℓ
+end
+
+@testset "normal mixture EM iteration" begin
+    N = 1000
+    for _ in 1:100
+        K = rand(3:6)
+        dist = normal_mixture(randn(K), abs.(randn(K)) + 1, normalize(abs.(randn(K) + 1), 1))
+        xs = rand(dist, N)
+        μs, σs, ws, hs, ℓ = normal_mixture_crude_init(3, xs)
+        for _ in 1:100
+            normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
+            ℓ′ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
+            @test ℓ' ≥ ℓ            # test that loglikelihood is always increasing
+            ℓ = ℓ′
+        end
+    end
+end
 
 """
     normal_mixture_EMM(x, m, max_step=1000, tol=eps())
