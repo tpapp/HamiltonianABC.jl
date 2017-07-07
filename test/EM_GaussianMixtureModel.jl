@@ -2,7 +2,6 @@ using Distributions
 using Parameters
 using Base.Test
 using StatsBase
-
 using ArgCheck
 
 """
@@ -179,6 +178,20 @@ Model with the updated parameters.
 """
 function normal_mixture_EM(xs, K; maxiter = 1000, tol = eps())
     μs, σs, ws, hs, ℓ = normal_mixture_crude_init(K, xs)
+    normal_mixture_EM!(μs, σs, ws, hs, xs; maxiter = maxiter, tol = tol, ℓ = ℓ)
+end
+
+"""
+Same as `normal_mixture_EM`, but with parameters provided as buffers.
+
+Starts with the maximization step (updating the parameters), expects valid `hs`.
+
+Can be used to save allocation time (with preallocated buffers), or start the
+algorithm from a known value (eg in MCMC, the previous iteration).
+"""
+function normal_mixture_EM!(μs, σs, ws, hs, xs;
+                            maxiter = 1000, tol = eps(),
+                            ℓ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs))
     for iter in 1:maxiter
         normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
         ℓ′ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
@@ -190,6 +203,7 @@ function normal_mixture_EM(xs, K; maxiter = 1000, tol = eps())
         end
         ℓ = ℓ′
     end
+    error("reached maximum number of iterations without convergence")
 end
 
 @testset "one-component mixture of normal EM" begin
