@@ -66,7 +66,6 @@ end
     normal_mixture_EM_posterior!(μs,σs,weights,hs,x)
 
 Update the 'hs' matrix given the parameters 'μs','σs' and 'weigths' of the Gaussian Mixture Model.
-
 Using the Expectation Maximization algorithm the hs matrix contains the posterior probabilities.
 Return the logpdf of the Mixture Model.
 """
@@ -96,7 +95,7 @@ the function also gives back the loglikelihood of the Mixture Model with
 the updated parameters.
 """
 
-function normal_mixture_EMM(x, m, tol = eps(), max_step = 1000 )
+function normal_mixture_EM(x, m, tol = eps(), max_step = 1000 )
     ℓ = NaN
     step = 1
     n = length(x)
