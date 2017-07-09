@@ -1,7 +1,9 @@
 using Distributions
-import Distributions: quantile  # define a method for g-and-k
+import Distributions: quantile
 using Parameters
 using ArgCheck
+import Base: rand
+
 
 "g-and-k distribution."
 struct GandK{T}
@@ -51,4 +53,11 @@ end
     gk = GandK(0, 1, 0, 0)
     xs = transform_standard_normal.(gk, rand(Normal(0, 1), 1000))
     test_cdf(x->cdf(Normal(0, 1), x), xs)
+end
+
+rand(gk::GandK, dims...) = transform_standard_normal.(gk, randn(dims...))
+
+@testset "g-and-k rand" begin
+    gk = GandK(0, 1, 0, 0)
+    test_cdf(x->cdf(Normal(0, 1), x), rand(gk, 1000))
 end
