@@ -40,17 +40,25 @@ function logdensity(pp::ToyQuantProblem, θ)
     logprior = logpdf(Uniform(Al, Au), θ[1]) + logpdf(Uniform(Bl, Bu), θ[2]) + logpdf(Uniform(Gl, Gu), θ[3]) + logpdf(Uniform(Kl, Ku), θ[4])
 
     z = quantile.(Normal(0, 1), ϵ)
-    X = normal_gk_quant.(z, θ...)
+    Xs = normal_gk_quant.(z, θ...)
+    # estimating parameters for the auxiliary model
+    params_quant = normal_mixture_EM(Xs, mix)
+    prob_matrix = unit_row_matrix(length(y), mix)
+    # loglikelihood with the estimated parameters and the ´observed´ points
+    log_likelihood = normal_mixture_EM_posterior!(params_quant[2], params_quant[3], params_quant[4], prob_matrix , y)
 
-    params_quant = normal_mixture_EMM(X, mix, tol)
-
-    loglikelihood = normal_mixture_EM_posterior!(params_quant[2], params_quant[3], params_quant[4], params_quant[5], y)
-
-    loglikelihood + logprior
+    log_likelihood + logprior
 
 end
 
+
 simulate!(pp::ToyQuantProblem) = rand!(pp.ϵ)
-Θ = [0.3,0.5,2.0,3.1]
-pp = ToyQuantProblem(map(x -> gk_quant(x, Θ...), rand(Uniform(0.1, 0.9), 1000)), 0.0, 1.0, 0.0, 1.0, -5.0, 5.0, 0.0, 10.0, 10000, eps(), 3, rand(Uniform(0.1, 0.9), 1000))
-chain, a = mcmc(RWMH(diagm([0.02, 0.02, 0.02, 0.02])), pp, Θ  , 20000)
+
+# true parameters
+χ = [3.05,1.0,2.0,3.1]
+# structure
+pp = ToyQuantProblem(map(x -> gk_quant(x, χ...), rand(10000)), 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 10.0, 10000, eps(), 3, rand(1000))
+
+# estimation
+chain, a = mcmc(RWMH(diagm([0.02, 0.02, 0.02, 0.02])), pp, [1.1, 0.9, 1.2, 1.4], 20000)
+mean(chain) - χ
