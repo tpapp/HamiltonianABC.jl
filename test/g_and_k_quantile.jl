@@ -1,55 +1,54 @@
 using Distributions
-using Calculus
-using Roots
-using Cubature
-using HamiltonianABC
-"""
-    gk_quant(x, a, b, g, k, c)
+import Distributions: quantile  # define a method for g-and-k
+using Parameters
+using ArgCheck
 
-Calculate the g-and-k quantile function, which
-can also be interpreted as a transformation of a standard random variate
-x represents the quantile of interest, a, b, g, k and c are parameters.
-a is the location parameter
-b is the non-negative, scale parameter
-c is a constant usually 0.8
-g is a measure of skewness
-k is a measure of kurtosis of the distribution 
-"""
+"g-and-k distribution."
+struct GandK{T}
+    "location"
+    a::T
+    "scale"
+    b::T
+    "controls skewness"
+    g::T
+    "controls kurtosis"
+    k::T
+    "a correction constant, usually 0.8"
+    c::T
+    function GandK{T}(a::T, b::T, g::T, k::T, c::T) where T
+        @argcheck b > 0 "Scale has to be positive."
+        @argcheck k ≥ 0 "Kurtosis has to be nonnegative."
+        new(a, b, g, k, c)
+    end
+end
 
-function gk_quant(x, a, b, g, k, c = 0.8)
-    z = quantile(Normal(0, 1), x)
-    a + b * (1 + c * (1 - exp(-g * z)) / (1 + exp(-g * z))) * ((1 + z ^ 2) ^ k) * z
+function GandK(a, b, g, k)
+    args = promote(a, b, g, k, 0.8)
+    GandK{typeof(args[1])}(args...)
 end
 
 """
-    normal_gk_quant(z, a, b, g, k, c = 0.8)
+    transform_standard_normal(gk, z)
 
-Take in the normal quantile 'z' and the parameters a, b, g and k.
+Transform a standard normal variate `z` to one with a g-and-k
+distribution `gk`.
 """
-
-function normal_gk_quant(z, a, b, g, k, c = 0.8)
-    a + b * (1 + c * (1 - exp(-g * z)) / (1 + exp(-g * z))) * ((1 + z ^ 2) ^ k) * z
+function transform_standard_normal(gk::GandK, z)
+    @unpack a, b, g, k, c = gk
+    e = exp(-g * z)
+    a + b * (1 + c*(1-e)/(1+e)) * ((1+z^2)^k) * z
 end
 
+quantile(gk::GandK, q) = transform_standard_normal(gk, quantile(Normal(0, 1), q))
 
-"""
-    get_cdf_quant(x, Θ)
-
-Invert the g-and-k quantile function at ´x´ in order to get
-to the cdf of the quantile distribution.
-Θ contains the parameters for the g-and-k quantile function.
-"""
-
-function get_cdf_quant(x, Θ)
-    fzero(y -> gk_quant(y, Θ...)-x, 1e-10, 1-1e-10)
+@testset "g-and-k sanity checks" begin
+    @test_throws ArgumentError GandK(0, 0, 0, 0)
+    @test_throws ArgumentError GandK(0, -1, 0, 0)
+    @test_throws ArgumentError GandK(0, 1, 0, -1)
 end
 
-"""
-    get_pdf_quant(x)
-
-Return the logpdf of the g-and-k quantile function at x
-"""
-
-function get_pdf_quant(quant_cdf, x)
-    log(derivative.(quant_cdf, x))
+@testset "g-and-k quantile distribution" begin
+    gk = GandK(0, 1, 0, 0)
+    xs = transform_standard_normal.(gk, rand(Normal(0, 1), 1000))
+    test_cdf(x->cdf(Normal(0, 1), x), xs)
 end
