@@ -127,18 +127,28 @@ end
     @test ℓ ≈ sum(logpdf.(Normal(1.2, 0.5), xs))
 end
 
-function normal_mixture_crude_init(K, xs)
-    N = length(xs)
+function normal_mixture_crude_init!(μs, σs, ws, hs, xs)
+    N, K = size(hs)
+    @argcheck K == length(μs) && K == length(σs) && K == length(ws)
+    @argcheck N == length(xs)
     μ, σ = mean_and_std(xs)
     if K == 1
-        μs = [μ]
+        μs .= [μ]
     else
-        μs = collect(μ + σ * linspace(-1, 1, K))
+        μs .= μ + σ * linspace(-1, 1, K)
     end
-    σs = fill(σ, K)
-    ws = fill(1/K, K)
+    σs .= σ
+    ws .= 1/K
+    normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
+end
+
+function normal_mixture_crude_init(K, xs)
+    N = length(xs)
+    μs = zeros(K)
+    σs = zeros(K)
+    ws = zeros(K)
     hs = Array{Float64}(N, K)
-    ℓ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
+    ℓ = normal_mixture_crude_init!(μs, σs, ws, hs, xs)
     μs, σs, ws, hs, ℓ
 end
 
