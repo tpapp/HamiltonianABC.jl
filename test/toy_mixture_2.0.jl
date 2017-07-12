@@ -3,6 +3,7 @@ using Parameters
 using HamiltonianABC
 using ContinuousTransformations
 using Plots
+using JLD
 import HamiltonianABC: logdensity, simulate!
 
 # remove this when adding to tests
@@ -11,60 +12,6 @@ cd(Pkg.dir("HamiltonianABC", "test"))
 include("utilities.jl")
 include("EM_GaussianMixtureModel.jl")
 include("g_and_k_quantile.jl")
-
-struct ToyQuantProblem
-    "observed data"
-    ys
-    "prior for a (location)"
-    prior_a
-    "prior for b (scale)"
-    prior_b
-    "prior for b (scale)"
-    prior_g
-    "prior for b (scale)"
-    prior_k
-    "convergence tolerance for (log) likelihood estimation"
-    likelihood_tol::Float64
-    "number of mixtures"
-    K::Integer
-    "Normal(0,1) draws for simulation"
-    ϵ::Vector{Float64}
-end
-
-simulate!(pp::ToyQuantProblem) = randn!(pp.ϵ)
-
-function logdensity(pp::ToyQuantProblem, θ)
-    a, b, g, k = θ
-    @unpack ys, prior_a, prior_b, prior_g, prior_k, ϵ, likelihood_tol, K = pp
-
-    logprior = logpdf(prior_a, a) + logpdf(prior_b, b) + logpdf(prior_g, g) + logpdf(prior_k, k)
-
-    try
-        gk = GandK(a, b, g, k)  # will catch invalid parameters FIXME use transformations
-        xs = transform_standard_normal.(gk,ϵ)
-        ℓ, μs, σs, ws, hs, iter = normal_mixture_EM(xs, K; tol = likelihood_tol)
-        if iter > 500
-            warn("$(iter) iterations")
-        end
-
-        hs = zeros(length(ys), K)
-        loglikelihood = normal_mixture_EM_posterior!(μs, σs, ws, hs, ys)
-
-        loglikelihood + logprior
-    catch
-        return -Inf
-    end
-end
-
-θ = [0.3, 0.5, 2.0, 3.1]
-ys = rand(GandK(θ...), 1000)
-logdensity(pp, θ)
-pp = ToyQuantProblem(ys,
-                     Uniform(0, 1), Uniform(0, 1), Uniform(-5, 5), Uniform(0, 10),
-                     √eps(), 3, randn(10000))
-chain, a = mcmc(RWMH(diagm([0.02, 0.02, 0.02, 0.02])), pp, θ, 10000)
-
-
 
 struct ToyQuantModel
     "observed data"
@@ -79,8 +26,6 @@ struct ToyQuantModel
     prior_k
     "convergence tolerance for (log) likelihood estimation"
     likelihood_tol::Float64
-    "number of mixtures"
-    K::Integer
     "Normal(0,1) draws for simulation"
     ϵ::Vector{Float64}
     "initial μs"
@@ -91,22 +36,38 @@ struct ToyQuantModel
     ws
     "initial posterior"
     hs
+    "a different hs for y"
+    hs_y
     "number of maximum iterations"
     maxiter::Integer
+end
+
+"""
+    ToyQuantModel(ys, prior_a, prior_b, prior_g, prior_k, K, M;
+                  [maxiter], [likelihood_tol])
+
+Convenience constructor with sensible default values.
+"""
+function ToyQuantModel(ys, prior_a, prior_b, prior_g, prior_k, K, M;
+                       maxiter = 1000, likelihood_tol = √eps())
+    ϵ = randn(M)
+    μs, σs, ws, hs_y, _ = normal_mixture_crude_init(K, ys)
+    hs = zeros(M, K)
+    ToyQuantModel(ys, prior_a, prior_b, prior_g, prior_k,
+                  likelihood_tol, ϵ, μs, σs, ws, hs, hs_y, maxiter)
 end
 
 
 """
     bridge_trans(dist)
 
-Take in a distribution, give back a Continuous transformation, with image on the support of the distribution.
-This is a facilitator function.
-
+Take in a distribution, give back a Continuous transformation, with
+image on the support of the distribution.  This is a facilitator
+function.
 """
-
-function bridge_trans(dist)
-    dist_left, dist_right = dist.a, dist.b
-    dist_tr = bridge(ℝ, dist_left .. dist_right)
+function bridge_trans(dist::Distribution{Univariate,Continuous})
+    supp = support(dist)
+    bridge(ℝ, minimum(supp) .. maximum(supp))
 end
 
 ##############################################################################
@@ -115,60 +76,71 @@ end
 # the inverse of the transformed number should equal the original number
 
 @testset "bridge testing" begin
-
     tt = bridge_trans(Uniform(0, 5))
     trans = tt(5)
     @test inv(tt)(trans) ≈ 5.0
 end
 
+"""
+Return a vector of transformations that map ℝ to valid parameters,
+respectively.
+
+Order of parameters is a, b, g, k.
+"""
+parameter_transformations(pp::ToyQuantModel) = 
+    bridge_trans.([pp.prior_a, pp.prior_b, pp.prior_g, pp.prior_k])
 
 simulate!(pp::ToyQuantModel) = randn!(pp.ϵ)
 
 function logdensity(pp::ToyQuantModel, θ)
-    a, b, g, k = θ
-    @unpack ys, prior_a, prior_b, prior_g, prior_k, ϵ, likelihood_tol, K, μs, σs, ws, hs, maxiter = pp
+    @unpack ys, ϵ, likelihood_tol, prior_a, prior_b, prior_g, prior_k, μs, σs, ws, hs, hs_y, maxiter, likelihood_tol = pp
 
-    # transforming b and k
-    bb = bridge_trans(prior_b)
-    kk = bridge_trans(prior_k)
-    b, log_b = bb(b, LOGJAC)
-    k, log_k = kk(k, LOGJAC)
+    # transforming parameters
+    trans = parameter_transformations(pp)
+    value_and_logjac = [t(raw_θ, LOGJAC) for (t, raw_θ) in zip(trans, θ)]
+    a, b, g, k = first.(value_and_logjac)
 
-    logprior = logpdf(prior_a, a) + logpdf(prior_b, b)  + logpdf(prior_g, g) + logpdf(prior_k, k)  +  log_b + log_k
+    println("a=$a, b=$b, g=$g, k=$k")
+    logprior = logpdf(prior_a, a) + logpdf(prior_b, b)  + logpdf(prior_g, g) +
+        logpdf(prior_k, k) + sum(last, value_and_logjac)
 
     gk = GandK(a, b, g, k)
-    xs = transform_standard_normal.(gk,ϵ)
-    ℓ, μs, σs, ws, hs, iter = normal_mixture_EM(xs, K, maxiter = maxiter)
-    #normal_mixture_EM!(μs, σs, ws, hs, xs;  maxiter = maxiter, tol = likelihood_tol) #
-
-    if iter ≥ maxiter
-        return -Inf
-    end
-    hs = zeros(length(ys), K)
-    loglikelihood = normal_mixture_EM_posterior!(μs, σs, ws, hs, ys)
+    xs = transform_standard_normal.(gk, ϵ)
+    println("x=$xs")
+    println("μs=$μs")
+    println("σs=$σs")
+    println("ws=$ws")
+    save("/tmp/lastparams.jld", Dict("xs" => xs, "μs" => μs, "σs" => σs,
+                                     "ws" => ws, "hs" => hs))
+    # ℓ = normal_mixture_crude_init!(μs, σs, ws, hs, xs)
+    ℓ, μs, σs, ws, hs, iter = normal_mixture_EM!(μs, σs, ws, hs, xs;
+                                                 maxiter = maxiter,
+                                                 tol = likelihood_tol,
+                                                 ℓ = ℓ)
+    loglikelihood = normal_mixture_EM_posterior!(μs, σs, ws, hs_y, ys)
 
     loglikelihood + logprior
-
 end
 
-θ = [0.3, 0.5, 2.0, 3.1]
-ys = rand(GandK(θ...), 10000)
-#  initializing the parameters - does not work (yet)
-ξ = [0.3, bb(0.5), 2.0, kk(3.1)]
-χ = [0.3, inv(bb)(0.5), 2.0, inv(kk)(3.1)]
-gk = GandK(ξ...)
-xs = transform_standard_normal.(gk, randn(1000))
-μs, σs, ws, hs = normal_mixture_EM(xs, 3)[2:5]
+a, b, g, k = 0.3, 0.5, 2.0, 3.1
+ys = rand(GandK(a, b, g, k), 50)
 
-pp = ToyQuantModel(ys,
-                     Uniform(0, 1), Uniform(0, 2), Uniform(0, 5), Uniform(0, 10),
-                     √eps(), 3, randn(1000), μs, σs, ws, hs, 1000)
+pp = ToyQuantModel(ys, Uniform(0, 1), Uniform(0, 2), Uniform(0, 5), Uniform(0, 10),
+                   3, 50)
+θ₀ = [inv(t)(param)
+      for (t,param) in zip(parameter_transformations(pp), [a, b, g, k])]
+# this currently breaks
+chain, a = mcmc(RWMH(diagm([0.01, 0.01, 0.01, 0.01])), pp, θ₀, 1000)
 
-bb = bridge_trans(Uniform(0, 2))
-kk = bridge_trans(Uniform(0, 10))
+# analysis of what happens
+lastparams = load("/tmp/lastparams.jld")
+μs, σs, ws, hs, xs = getindex.(lastparams, ["μs","σs","ws","hs","xs"])
 
+normal_mixture_EM(xs, 3)               # works fine
+normal_mixture_EM!(μs, σs, ws, hs, xs) # fails
 
-chain, a = mcmc(RWMH(diagm([0.01, 0.01, 0.01, 0.01])), pp, χ, 10000)
+########## I stopped here ##########
+
 # saving the transformed values
 r = length(chain)
 a_sample = Vector(r)
