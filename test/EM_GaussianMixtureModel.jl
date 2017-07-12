@@ -192,18 +192,19 @@ algorithm from a known value (eg in MCMC, the previous iteration).
 function normal_mixture_EM!(μs, σs, ws, hs, xs;
                             maxiter = 1000, tol = eps(),
                             ℓ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs))
-    for iter in 1:maxiter
+    iter = 0
+    while iter < maxiter
         normal_mixture_EM_parameters!(μs, σs, ws, hs, xs)
         ℓ′ = normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
         ℓ′ < ℓ && warn("decreasing likelihood, this should not happen")
-        if ℓ′-ℓ ≤ tol
-            p = sortperm(μs)
-            return ℓ, μs[p], σs[p], ws[p], hs, iter
-            break
-        end
+        ℓ′-ℓ ≤ tol && break
         ℓ = ℓ′
+        iter += 1
     end
-    error("reached maximum number of iterations without convergence")
+    iter == maxiter &&
+        warn("reached maximum number of iterations without convergence")
+    p = sortperm(μs)
+    ℓ, μs[p], σs[p], ws[p], hs, iter
 end
 
 @testset "one-component mixture of normal EM" begin
