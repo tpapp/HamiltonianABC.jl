@@ -127,6 +127,12 @@ end
     @test ℓ ≈ sum(logpdf.(Normal(1.2, 0.5), xs))
 end
 
+"""
+    ℓ = normal_mixture_crude_init!(μs, σs, ws, hs, xs)
+
+Sensible but crude initialization for normal mixtures, modifies the
+first four arguments, returns log likelihood.
+"""
 function normal_mixture_crude_init!(μs, σs, ws, hs, xs)
     N, K = size(hs)
     @argcheck K == length(μs) && K == length(σs) && K == length(ws)
@@ -142,6 +148,12 @@ function normal_mixture_crude_init!(μs, σs, ws, hs, xs)
     normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
 end
 
+"""
+    μs, σs, ws, hs, ℓ = normal_mixture_crude_init(K, xs)
+
+Sensible but crude initialization for normal mixtures. Allocates the
+relevant arrays, see signature for return value.
+"""
 function normal_mixture_crude_init(K, xs)
     N = length(xs)
     μs = zeros(K)
