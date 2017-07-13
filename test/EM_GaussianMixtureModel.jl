@@ -105,7 +105,7 @@ function normal_mixture_EM_posterior!(μs, σs, ws, hs, xs)
     @argcheck K == length(μs) && K == length(σs) && K == length(ws)
     @argcheck N == length(xs)
     for k in 1:K
-        hs[:, k] .= ws[k] * pdf.(Normal(μs[k], σs[k]), xs)
+        hs[:, k] .= ws[k] * pdf.(Normal(μs[k], σs[k]), xs) #+ eps()
     end
     row_sums = sum(hs, 2)
     mix_likelihood = sum(log.(row_sums))
@@ -190,7 +190,7 @@ log-likelihood increases by less than `tol`.
 
 Return `ℓ, μs, σs, ws, hs, iter`, where ℓ is the log likelihood
 
-Implementing the algorithm as described in 
+Implementing the algorithm as described in
 [[https://en.wikipedia.org/wiki/Mixture_model#Expectation_maximization_.28EM.29]].
 
 The function uses the Expectation Maximization algorithm to update the

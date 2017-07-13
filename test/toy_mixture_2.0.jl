@@ -87,7 +87,7 @@ respectively.
 
 Order of parameters is a, b, g, k.
 """
-parameter_transformations(pp::ToyQuantModel) = 
+parameter_transformations(pp::ToyQuantModel) =
     bridge_trans.([pp.prior_a, pp.prior_b, pp.prior_g, pp.prior_k])
 
 simulate!(pp::ToyQuantModel) = randn!(pp.ϵ)
@@ -100,19 +100,19 @@ function logdensity(pp::ToyQuantModel, θ)
     value_and_logjac = [t(raw_θ, LOGJAC) for (t, raw_θ) in zip(trans, θ)]
     a, b, g, k = first.(value_and_logjac)
 
-    println("a=$a, b=$b, g=$g, k=$k")
+    #println("a=$a, b=$b, g=$g, k=$k")
     logprior = logpdf(prior_a, a) + logpdf(prior_b, b)  + logpdf(prior_g, g) +
         logpdf(prior_k, k) + sum(last, value_and_logjac)
 
     gk = GandK(a, b, g, k)
     xs = transform_standard_normal.(gk, ϵ)
-    println("x=$xs")
-    println("μs=$μs")
-    println("σs=$σs")
-    println("ws=$ws")
-    save("/tmp/lastparams.jld", Dict("xs" => xs, "μs" => μs, "σs" => σs,
+    #println("x=$xs")
+    #println("μs=$μs")
+    #println("σs=$σs")
+    #println("ws=$ws")
+    #save("/tmp/lastparams.jld", Dict("xs" => xs, "μs" => μs, "σs" => σs,
                                      "ws" => ws, "hs" => hs))
-    # ℓ = normal_mixture_crude_init!(μs, σs, ws, hs, xs)
+    ℓ = normal_mixture_crude_init!(μs, σs, ws, hs, xs)
     ℓ, μs, σs, ws, hs, iter = normal_mixture_EM!(μs, σs, ws, hs, xs;
                                                  maxiter = maxiter,
                                                  tol = likelihood_tol,
@@ -147,11 +147,12 @@ a_sample = Vector(r)
 b_sample = Vector(r)
 g_sample = Vector(r)
 k_sample = Vector(r)
+q, w, e, z = [parameter_transformations(pp)...]
 for i in 1:r
-    a_sample[i] = chain[i][1]
-    b_sample[i] = bb(chain[i][2])
-    g_sample[i] = chain[i][3]
-    k_sample[i] = kk(chain[i][4])
+    a_sample[i] = q(chain[i][1])
+    b_sample[i] = w(chain[i][2])
+    g_sample[i] = e(chain[i][3])
+    k_sample[i] = z(chain[i][4])
 end
 plot(a_sample)
 plot(b_sample)
@@ -168,8 +169,8 @@ mean(k_sample)
 
 
 @testset "toy mixture " begin
-    @test mean(a_sample) ≈ θ[1] rtol = 0.15
-    @test mean(b_sample) ≈ θ[2] rtol = 0.3
-    @test mean(g_sample) ≈ θ[3] rtol = 0.5
-    @test mean(k_sample) ≈ θ[4] rtol = 0.15
+    @test mean(a_sample) ≈ a rtol = 0.15
+    @test mean(b_sample) ≈ b rtol = 0.3
+    @test mean(g_sample) ≈ g rtol = 0.5
+    @test mean(k_sample) ≈ k rtol = 0.15
 end
