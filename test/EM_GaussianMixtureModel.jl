@@ -208,7 +208,15 @@ Given observations `xs`, estimate a mixture of `K` normals.
 Do at most `maxiter` iterations. Convergence stops when the
 log-likelihood increases by less than `tol`.
 
-Return `ℓ, μs, σs, logws, loghs, iter`, where ℓ is the log likelihood
+Return `ℓ, μs, σs, logws, loghs, iter, conv`, where:
+
+1. ℓ is the log likelihood,
+2. μs, σs are the means and variances of the normal components
+3. logws are log weights,
+4. loghs are the log posterior,
+5. iter is the number of iterations
+
+When iter == maxiter, the algorithm did not converge.
 
 Implementing the algorithm as described in
 [[https://en.wikipedia.org/wiki/Mixture_model#Expectation_maximization_.28EM.29]].
