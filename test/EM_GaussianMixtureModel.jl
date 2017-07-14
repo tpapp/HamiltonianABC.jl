@@ -49,6 +49,16 @@ end
 end
 
 """
+    is_compatible_arguments(μs, σs, logws, loghs, xs)
+
+Test if the dimensions of the arguments are compatible.
+"""
+function is_compatible_arguments(μs, σs, logws, loghs, xs)
+    N, K = size(loghs)
+    (K == length(μs) == length(σs) == length(logws)) && (N == length(xs))
+end
+
+"""
     normal_mixture_EM_parameters!(μs, σs, logws, loghs, xs)
 
 Maximization step. Update the means `μs`, standard deviations `σs` and
@@ -60,8 +70,7 @@ observation `i`.
 """
 function normal_mixture_EM_parameters!(μs, σs, logws, loghs, xs)
     N, K = size(loghs)
-    @argcheck K == length(μs) && K == length(σs) && K == length(logws)
-    @argcheck N == length(xs)
+    @argcheck is_compatible_arguments(μs, σs, logws, loghs, xs)
     for j in 1:K
         logh = @view loghs[:, j]
         log∑h = logsumexp(logh)
@@ -105,8 +114,7 @@ Return the (marginalized) log likelihood of the mixture model.
 """
 function normal_mixture_EM_posterior!(μs, σs, logws, loghs, xs)
     N, K = size(loghs)
-    @argcheck K == length(μs) && K == length(σs) && K == length(logws)
-    @argcheck N == length(xs)
+    @argcheck is_compatible_arguments(μs, σs, logws, loghs, xs)
     for k in 1:K
         loghs[:, k] .= logws[k] + logpdf.(Normal(μs[k], σs[k]), xs)
     end
@@ -136,8 +144,7 @@ first four arguments, returns log likelihood.
 """
 function normal_mixture_crude_init!(μs, σs, logws, loghs, xs)
     N, K = size(loghs)
-    @argcheck K == length(μs) && K == length(σs) && K == length(logws)
-    @argcheck N == length(xs)
+    @argcheck is_compatible_arguments(μs, σs, logws, loghs, xs)
     μ, σ = mean_and_std(xs)
     if K == 1
         μs .= [μ]
