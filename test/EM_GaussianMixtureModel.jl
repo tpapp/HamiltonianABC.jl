@@ -67,6 +67,18 @@ data `xs`.
 
 `loghs[i, j]` is the posterior probability of component `j` for
 observation `i`.
+
+Note that because of convergence problems with isolated and/or
+repeated points (practically 0 variance), we correct σs by the machine
+ϵ. For the description of the problem and other possible methods, see
+
+Archambeau, Cédric, John Aldo Lee, and Michel Verleysen. "On
+Convergence Problems of the EM Algorithm for Finite Gaussian
+Mixtures." ESANN. Vol. 3. 2003.
+
+Yang, Zheng Rong, and Sheng Chen. "Robust maximum likelihood training
+of heteroscedastic probabilistic neural networks." Neural Networks
+11.4 (1998): 739-747.
 """
 function normal_mixture_EM_parameters!(μs, σs, logws, loghs, xs)
     N, K = size(loghs)
@@ -77,7 +89,7 @@ function normal_mixture_EM_parameters!(μs, σs, logws, loghs, xs)
         logws[j] = log∑h - log(N)
         weights = exp.(logh - log∑h)
         μs[j] = dot(xs, weights)
-        σs[j] = √sum(weights .* (xs - μs[j]).^2)
+        σs[j] = √sum(weights .* (xs - μs[j]).^2) + eps()
     end
     nothing
 end
@@ -261,4 +273,26 @@ end
     @test norm(σs - σe, 1) ≤ 0.1
     @test norm(ws - exp.(we)) ≤ 0.1
     @test iter < 500
+end
+
+@testset "mixture with outliers" begin
+    xs = [12.932452188340273, 2.2016456675666727, 0.23196720150275324, 1.3691367352423272,
+          -1.9233294652628463, 0.5309730139202926, -16.3914493973905, 0.5135149269904411,
+          0.5004869515882554, -0.4249034374632298, -16.309097459297387, 1.8273014356996606,
+          0.9068012606137947, 0.18502720824389784, 0.611191325556077, 0.33694679175260556,
+          0.41909904351062194, 0.3183507750621336, 3.4788126363867646, 0.650440006783765,
+          -0.2297950276864753, 0.037752598867667464, 0.6883596258902946, 0.016175910469082733,
+          -0.43895880066117143, 1162.2229232994482, 1.8295627371522625, 4.234673977355862,
+          0.3435988754507263, -0.22757689294492156, -0.10570769651003853, 1.388937436866165,
+          0.6491483010788963, 0.629879050472239, 1.281837862100565, -0.17399472202932442,
+          0.5718223728848091, -0.8792641804249895, 1.827421833992593, 0.38218451185136754,
+          0.016510405992137323, 0.06351884450746353, 0.3643079903721287, 0.452080027779106,
+          -1.090084082339093, 1.4366196407002945, 0.28103662388081546, -0.22474872099544618,
+          -0.3177668023128347, 0.13551948074007314]
+    ℓ, μs, σs, logws, _, iter = normal_mixture_EM(xs, 3)
+    @test maximum(abs.(μs[1:2])) ≤ 2
+    @test μs[3] ≥ 1000          # the outlier
+    @test minimum(abs.(σs[1:2])) ≥ 0.5
+    @test σs[3] ≤ 2*eps()       # the outlier
+    @test iter ≤ 50
 end
