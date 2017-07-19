@@ -34,32 +34,49 @@ struct Toy_Vol_Problem
     ν::Vector{Float64}
 end
 
-simulate!(pp::Toy_Vol_Problem) = rand!(pp.ϵ, pp.ν)
+function simulate!(pp::Toy_Vol_Problem)
+    N = length(pp.ϵ)
+    pp = Toy_Vol_Problem(pp.ys, pp.prior_ρ, pp.prior_σ_v, rand(Chisq(1), N), randn(N))
+end
+
+function OLS(y,x)
+    N, K = size(x)
+    β = inv(x' * x) * (x' * y)
+    err = (y - x * β)
+    σ_2 = (err' * err) / (N) + eps()
+    return β, σ_2
+end
 
 function logdensity(pp::Toy_Vol_Problem, θ)
     @unpack ys, ϵ, prior_ρ, prior_σ_v, ν = pp
     ρ, σ_v = θ
+    N = length(ϵ)
+    #println(ϵ[1])
+
+    if (ρ > 1 - eps() || σ_v ≤ 0 )
+        return - Inf
+    else
 
     logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ_v, σ_v)
 
     # Generating xs, which is the latent volatility process
-    if ρ > 1 - eps()
-        return - Inf
-    else
+
         xs = simulate_stochastic(ρ, σ_v, [ϵ ν])[2]
-        β_1, β_2 = mean_and_std(xs, corrected = false)
-        println(xs)
+        X = [ones(N-2) xs[2:(end-1)] xs[3:end]]
+        β, σ_2 = OLS(xs[3:end], X)
+        β_1, β_2, β_3 = β
         log_likelihood = 0
-        for i in 2:length(xs)
-            log_likelihood += logpdf(Normal(β_1 * xs[i-1] + β_2 * ν[i-1], √(π^2 / 2)), ys[i])
+        for i in 3:length(ys)
+            log_likelihood += logpdf(Normal(β_1 + β_2 * ys[i-1] + β_3 * ys[i-2], √(σ_2)), ys[i])
         end
-        #log_likelihood = sum(logpdf(Normal(β_1, β_2 + π^2 /2), ys))
         logprior + log_likelihood
     end
 
 end
 
-y = simulate_stochastic(0.8, 1, [rand(Chisq(1), 100) randn(100)])[1]
-pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), rand(Chisq(1), 100), randn(100))
+y = simulate_stochastic(0.8, 1, [rand(Chisq(1), 1000) randn(1000)])[1]
+pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), rand(Chisq(1), 10000), randn(10000))
 θ = [0.8, 1]
-chain, a = mcmc(RWMH(diagm([0.02, 0.02])), pp, θ, 100)
+logdensity(pp, θ)
+chain, a = mcmc(RWMH(diagm([0.02, 0.02])), pp, θ, 5000)
+mean(chain)
