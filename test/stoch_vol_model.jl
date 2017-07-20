@@ -97,7 +97,7 @@ function logdensity(pp::Toy_Vol_Problem, θ)
 
         logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ_v, σ_v)
 
-    # Generating xs, which is the latent volatility process
+    # Generating xs 
         xs = simulate_stochastic(ρ, σ_v, ϵ, ν)
         X = [ones(N-2) xs[2:(end-1)] xs[3:end]]
         β, σ_2 = OLS(xs[3:end], X)
