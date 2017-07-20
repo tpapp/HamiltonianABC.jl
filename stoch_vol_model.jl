@@ -5,7 +5,7 @@ using ContinuousTransformations
 using Plots
 using StatsBase
 import HamiltonianABC: logdensity, simulate!
-
+using Base.Test
 
 function simulate_stochastic(ρ, σ_v, ϵs)
     N, K = size(ϵs)
@@ -81,13 +81,19 @@ pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), rand(Chisq(1), 1000)
 logdensity(pp, θ)
 chain, a = mcmc(RWMH(diagm([0.01, 0.01])), pp, θ, 10000)
 
-result = hcat(chain[5000:end]...)
-ρ_sample = result[1, :]
-σ_sample = result[2, :]
-plot(ρ_sample)
-plot(σ_sample)
-mean(ρ_sample)
-mean(σ_sample)
+result_1 = hcat(chain[5000:end]...)
+ρ_sample_1 = result_1[1, :]
+σ_sample_1 = result_1[2, :]
+plot(ρ_sample_1)
+plot(σ_sample_1)
+mean(ρ_sample_1)
+mean(σ_sample_1)
+
+
+@testset "AR(2)" begin
+    @test mean(ρ_sample_1) ≈ θ[1] rtol = 0.2
+    @test mean(σ_sample_1) ≈ θ[2] rtol = 0.2
+end
 
 
 function logdensity(pp::Toy_Vol_Problem, θ)
@@ -131,10 +137,15 @@ logdensity(pp, θ)
 chain, a = mcmc(RWMH(diagm([0.01, 0.01])), pp, θ, 10000)
 
 
-result = hcat(chain[5000:end]...)
-ρ_sample = result[1, :]
-σ_sample = result[2, :]
-plot(ρ_sample)
-plot(σ_sample)
-mean(ρ_sample)
-mean(σ_sample)
+result_2 = hcat(chain[5000:end]...)
+ρ_sample_2 = result_2[1, :]
+σ_sample_2 = result_2[2, :]
+plot(ρ_sample_2)
+plot(σ_sample_2)
+mean(ρ_sample_2)
+mean(σ_sample_2)
+
+@testset "first difference" begin
+    @test mean(ρ_sample_2) ≈ θ[1] rtol = 0.25
+    @test mean(σ_sample_2) ≈ θ[2] rtol = 0.25
+end
