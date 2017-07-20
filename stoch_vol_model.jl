@@ -75,7 +75,7 @@ function logdensity(pp::Toy_Vol_Problem, θ)
 
 end
 
-y = simulate_stochastic(0.8, 1, [rand(Chisq(1), 3) randn(3)])[1]
+y = simulate_stochastic(0.8, 1, [rand(Chisq(1), 100) randn(100)])[1]
 pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), rand(Chisq(1), 1000), randn(1000))
 θ = [0.8, 1]
 logdensity(pp, θ)
@@ -106,7 +106,7 @@ function logdensity(pp::Toy_Vol_Problem, θ)
 
         xs = simulate_stochastic(ρ, σ_v, [ϵ ν])[1]
 
-    # We will work with first differences    
+    # We will work with first differences
         Δ_2 = xs[2:(end-2)] - xs[1:(end-3)]
         Δ_1 = xs[3:(end-1)] -  xs[2:(end-2)]
         Δ = xs[4:end] - xs[3:(end-1)]
@@ -114,8 +114,8 @@ function logdensity(pp::Toy_Vol_Problem, θ)
         β, σ_2 = OLS(Δ, X)
         β_2, β_3 = β
         log_likelihood = 0
-        for i in 3:length(ys)
-            log_likelihood += logpdf(Normal(β_2 * ys[i-1] + β_3 * ys[i-2], √(σ_2)), ys[i])
+        for i in 4:length(ys)
+            log_likelihood += logpdf(Normal(β_2 * (ys[i-1] - ys[i-2]) + β_3 *(ys[i-2] - ys[i-3]), √(σ_2)), ys[i] - ys[i-1])
         end
         return(logprior + log_likelihood)
     end
@@ -124,7 +124,7 @@ end
 
 
 
-y = simulate_stochastic(0.8, 1, [rand(Chisq(1), 100) randn(100)])[1]
+y = simulate_stochastic(0.8, 1, [rand(Chisq(1), 1000) randn(1000)])[1]
 pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), rand(Chisq(1), 10000), randn(10000))
 θ = [0.8, 1]
 logdensity(pp, θ)
