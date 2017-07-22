@@ -3,10 +3,12 @@ using Parameters
 using HamiltonianABC
 using ContinuousTransformations
 using Plots
-#using Gadfly    # fail to precompile Gadfly for me
 using StatsBase
+using StatPlots                 # for kernel density
 import HamiltonianABC: logdensity, simulate!
 using Base.Test
+using PlotlyJS
+plotlyjs()
 
 ############################################################################
 ## Simple simultaneous equations
@@ -81,7 +83,6 @@ function OLS(y, x)
     return β, σ_2
 end
 
-
 """
     simulate!(pp::ToySimultaneousModel)
 
@@ -115,15 +116,18 @@ end
 
 
 # Trial
-β = [0.8]
-C, Y = simulate_simultaneous(β[1], rand(Normal(100, 3), 100), rand(Normal(0, 5), 100))
+β = 0.9
+C, Y = simulate_simultaneous(β, rand(Normal(100, 3), 100), rand(Normal(0, 5), 100))
 pp = ToySimultaneousModel(C, Y, Uniform(0, 1), Normal(100, 3), Normal(0, 5), 1000)
-chain, a = mcmc(RWMH(diagm([0.01])), pp, [0.1], 5000)
-result = vcat(chain[500:end]'...)
+# variance is hand-tuned to get a ≈ 0.6
+chain, a = mcmc(RWMH(diagm([4e-7])), pp, [0.1], 5000)
+result = vcat(chain[2500:end]'...)
+
 # Analysis with plotting
-plot(result)
-mean(result)
+plt = plot(density(result), label = "posterior", title = "β")
+plot!(plt, a -> pdf(pp.prior_β, a), linspace(0, 1, 100), label = "prior")
+vline!(plt, [β], label = "true value")
 
 @testset "simultaneous equation" begin
-    @test mean(result) ≈ β[1] rtol = 0.05
+    @test mean(result) ≈ β rtol = 0.05
 end
