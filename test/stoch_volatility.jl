@@ -93,14 +93,13 @@ lag_matrix(xs, ns, K = maximum(ns)) = hcat([lag(xs, n, K) for n in ns]...)
 
 @test lag_matrix(1:5, 1:3) == [3 2 1; 4 3 2]
 
-"""
-    y, X = yX1(zs, K)
-"""
+"first auxiliary regression y, X, meant to capture first differences"
 function yX1(zs, K)
     Δs = diff(zs)
     lag(Δs, 0, K), hcat(lag_matrix(Δs, 1:K, K), ones(length(Δs)-K), lag(zs, 1, K+1))
 end
 
+"second auxiliary regression y, X, meant to capture levels"
 function yX2(zs, K)
     lag(zs, 0, K), hcat(ones(length(zs)-K), lag_matrix(zs, 1:K, K))
 end
@@ -149,7 +148,7 @@ chain, a = mcmc(RWMH(diagm([0.02, 0.1])), pp, [ρ, σ], 10000) # Σ was hand-tun
 posterior = vcat(chain[5000:end]'...)
 
 # convergence diagnostics (visual)
-plot(posterior, label = ["ρ" "σ²"])
+plot(posterior, label = ["ρ" "σ"])
 
 # marginal posterior densities vs prior
 plt = plot(density(posterior[:, 1]), label = "posterior", title = "ρ")
