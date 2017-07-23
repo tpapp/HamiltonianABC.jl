@@ -132,12 +132,13 @@ end
 # Trial
 θ = [0.8, 1.2]
 y = simulate_stochastic(θ[1], θ[2], rand(Chisq(1), 1000), randn(1000))
-pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), 10000)
+pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), 1000)
 
 # visualize posterior
 ρ_grid = linspace(-0.9, 0.9, 60)
 σ²_grid = linspace(0.1, 2, 50)
 logdensity_on_grid = ((ρ, σ²)->logdensity(pp, [ρ, σ²])).(ρ_grid, σ²_grid')
+logdensity_on_grid .-= maximum(logdensity_on_grid)
 heatmap(ρ_grid, σ²_grid, logdensity_on_grid', xlab = "ρ", ylab = "σ²",
         title = "log posterior")
 
