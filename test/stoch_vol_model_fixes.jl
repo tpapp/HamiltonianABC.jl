@@ -7,7 +7,6 @@ using StatsBase
 using StatPlots                 # for kernel density
 import HamiltonianABC: logdensity, simulate!
 using Base.Test
-using PlotlyJS
 plotlyjs()                      # Tamas likes this, optional
 
 """
@@ -83,27 +82,27 @@ function OLS(y, x)
 end
 
 
-## In this form, we use an AR(2) process of the first differences and the squared first lagged variable as the auxiliary model.
+## In this form, we use an AR(2) process of the first differences with an intercept as the auxiliary model.
 
 """
     lag(xs, n, K)
 
 Lag-`n` operator on vector `xs` (maximum `K` lags).
 """
-lag(xs, n, K) = xs[(1:(end-K))+n]
+lag(xs, n, K) = xs[((K+1):end)-n]
 
 lag_matrix(xs, ns, K = maximum(ns)) = hcat([lag(xs, n, K) for n in ns]...)
 
-@test lag_matrix(1:5, 1:3) == [2 3 4; 3 4 5]
+@test lag_matrix(1:5, 1:3) == [3 2 1; 4 3 2]
 
 """
     y, X = diff_yX(zs, K)
 
-Take the first differences of `zs`, then return conformable `y` and `X` matrices for OLS, where `X` is the first `K -1` lags of the first differences and `y` is lag K.
+Take the first differences of `zs`, then return conformable `y` and `X` matrices for OLS, where `X` is the first `K -1` lags of the first differences  plus a vector of ones and `y` starts at time `K+1`.
 """
 function diff_yX(zs, K)
     Δs = diff(zs)
-    lag(Δs, K, K), lag_matrix(Δs, (1:K)-1, K)
+    lag(Δs, 0, K), hcat(lag_matrix(Δs, (K:-1:1), K), ones(length(Δs)-2))
 end
 
 function logdensity(pp::Toy_Vol_Problem, θ)
@@ -121,19 +120,18 @@ function logdensity(pp::Toy_Vol_Problem, θ)
 
         zs = simulate_stochastic(ρ, σ_v, ϵ, ν)
         y, X = diff_yX(zs, 2)
-        X = cat(2, X, zs[3 : end - 1].^2)
 
         # We work with first differences
         β, σ_2 = OLS(y, X)
         yy, yX = diff_yX(ys, 2)
-        yX = cat(2, yX, ys[3 : end-1].^2)
         log_likelihood = sum(logpdf.(Normal(0, √(σ_2)), yy - yX * β))
         logprior + log_likelihood
     end
 end
 
 # Trial
-y = simulate_stochastic(0.5, 1, rand(Chisq(1), 100), randn(100))
+θ = [0.8, 1.2]
+y = simulate_stochastic(θ[1], θ[2], rand(Chisq(1), 1000), randn(1000))
 pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), 10000)
 
 # visualize posterior
@@ -146,9 +144,9 @@ heatmap(ρ_grid, σ²_grid, logdensity_on_grid', xlab = "ρ", ylab = "σ²",
 heatmap(ρ_grid, σ²_grid, exp.(logdensity_on_grid'), xlab = "ρ", ylab = "σ²",
         title = "posterior")
 
-θ = [0.5, 1]
+
 logdensity(pp, θ)
-chain, a = mcmc(RWMH(diagm([0.07, 0.1])), pp, θ, 10000) # Σ was hand-tuned
+chain, a = mcmc(RWMH(diagm([0.02, 0.1])), pp, θ, 10000) # Σ was hand-tuned
 
 # Analysis with some plotting
 
@@ -167,7 +165,7 @@ vline!(plt, [θ[2]], label = "true value")
 
 mean(posterior, 1)     # not bad, could be better
 
-#@testset "first difference" begin
-#    @test mean(posterior, 1)[1] ≈ θ[1] rtol = 0.10
-#    @test mean(posterior, 1)[2] ≈ θ[2] rtol = 0.10
-#end
+@testset "first difference" begin
+    @test mean(posterior, 1)[1] ≈ θ[1] rtol = 0.30
+    @test mean(posterior, 1)[2] ≈ θ[2] rtol = 0.30
+end
