@@ -77,8 +77,8 @@ Xs = rand(Normal(5,1), 1000)
 Ys = 2.1 * Xs + randn(1000)
 OLS(Ys, Xs)
 d_ = [2.1, 1.0]
-likelihood_calc(Ys, d_)
-ForwardDiff.gradient(dd -> likelihood_calc(Ys - Xs, dd), d_)
+#likelihood_calc(Ys, d_)
+#ForwardDiff.gradient(dd -> likelihood_calc(Ys - Xs, dd), d_)
 
 
 
