@@ -1,13 +1,14 @@
+using ArgCheck
 using Distributions
 using Parameters
-using HamiltonianABC
-using ContinuousTransformations
-using Plots
+using DynamicHMC
 using StatsBase
 using StatPlots                 # for kernel density
-import HamiltonianABC: logdensity, simulate!
+import DynamicHMC: logdensity, loggradient, length
 using Base.Test
-using PlotlyJS
+using ForwardDiff
+using ReverseDiff
+using Plots
 plotlyjs()
 
 ############################################################################
@@ -37,7 +38,7 @@ Take in the prameter (β), X and errors us, give back the endogenous variables o
 """
 function simulate_simultaneous(β, X, us)
     N = length(us)
-    C = Vector{Float64}
+    C = Vector{Real}
     Y = (X .+ us) / (1 - β)
     C = β * Y .+ us
     return (C, Y)
@@ -45,11 +46,11 @@ end
 
 struct ToySimultaneousModel
     "observed consumption"
-    Cs::Vector{Float64}
+    Cs::Vector{Real}
     "observed output"
-    Ys::Vector{Float64}
+    Ys::Vector{Real}
     "non-comsumption"
-    Xs::Vector{Float64}
+    Xs::Vector{Real}
     "distribution of Xs"
     dist_x
     "prior for β"
@@ -99,17 +100,14 @@ end
 function logdensity(pp::ToySimultaneousModel, β)
     @unpack Cs, Ys, Xs, prior_β, us = pp
     logprior = logpdf(prior_β, β[1])
-
+    Ones = ones(length(us))
     ## Generating the data
     C, Y = simulate_simultaneous(β[1], Xs, us)
     # OLs estimatation, regressing C on [1 X]
-    est, σ_2 = OLS(C, [ones(length(us)) (Y - C)])
-    β_1, β_2 = est
+    est, σ_2 = OLS(C, [Ones (Y - C)])
 
-    log_likelihood = 0
-    for i in 1:length(Cs)
-        log_likelihood += logpdf(Normal(β_1 + β_2 * (Ys[i] - Cs[i]), √(σ_2)), Cs[i])
-    end
+    log_likelihood = sum(logpdf.(Normal(0, √σ_2), Cs - [ones(length(Cs)) Ys-Cs] * est))
+
 
     return(logprior + log_likelihood)
 end
@@ -119,15 +117,11 @@ end
 β = 0.9
 C, Y = simulate_simultaneous(β, rand(Normal(100, 3), 100), rand(Normal(0, 5), 100))
 pp = ToySimultaneousModel(C, Y, Uniform(0, 1), Normal(100, 3), Normal(0, 5), 1000)
-# variance is hand-tuned to get a ≈ 0.6
-chain, a = mcmc(RWMH(diagm([4e-7])), pp, [0.1], 5000)
-result = vcat(chain[2500:end]'...)
-
-# Analysis with plotting
-plt = plot(density(result), label = "posterior", title = "β")
-plot!(plt, a -> pdf(pp.prior_β, a), linspace(0, 1, 100), label = "prior")
-vline!(plt, [β], label = "true value")
-
-@testset "simultaneous equation" begin
-    @test mean(result) ≈ β rtol = 0.05
-end
+# works fine
+logdensity(pp, β)
+## loggradient with ForwardDiff
+loggradient(pp::ToySimultaneousModel, x) = ForwardDiff.gradient(y->logdensity(pp, y), x)
+loggradient(pp, [β])
+## with ReverseDiff
+loggradient_(pp::ToySimultaneousModel, x) = ReverseDiff.gradient(y->logdensity(pp, y), x)
+loggradient_(pp, [β])
