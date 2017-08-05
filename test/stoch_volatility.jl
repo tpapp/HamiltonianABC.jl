@@ -28,10 +28,11 @@ The discrete-time version of the Ornstein-Ulenbeck Stochastic - volatility model
 function simulate_stochastic(ρ, σ, ϵs, νs)
     N = length(ϵs)
     @argcheck N == length(νs)
-    xs = Vector{Real}(N)
-    for i in 1:N
-        xs[i] = (i == 1) ? (νs[1]*σ*(1 - ρ^2)^(-0.5)) : (ρ*xs[i-1] + σ*νs[i])
-    end
+    x₀ = νs[1]*σ*(1 - ρ^2)^(-0.5)
+    xs = Vector{typeof(x₀)}(N)
+    for i in 1:N
+        xs[i] = (i == 1) ? x₀ : (ρ*xs[i-1] + σ*νs[i])
+    end
     xs + log.(ϵs) + 1.27
 end
 
@@ -39,11 +40,11 @@ simulate_stochastic(ρ, σ, N) = simulate_stochastic(ρ, σ, rand(Chisq(1), N), 
 
 struct Toy_Vol_Problem
     "observed data"
-    ys
+    ys::Vector{Float64}
     "prior for ρ (persistence)"
-    prior_ρ
+    prior_ρ::Distribution{Univariate,Continuous}
     "prior for σ_v (volatility of volatility)"
-    prior_σ
+    prior_σ::Distribution{Univariate,Continuous}
     "χ^2 draws for simulation"
     ϵ::Vector{Float64}
     "Normal(0,1) draws for simulation"
@@ -77,12 +78,12 @@ end
 Take in the dependant variable (y) and the regressor (x), give back the estimated coefficients (β) and the variance (v).
 """
 function OLS(y, x)
-    β = x \ y
-    err = (y - x * β)
-    v = mean(abs2, err)
-    return β, v
+    β::Vector{Float64} = x \ y
+    err::Vector{Float64} = (y - x * β)
+    v::Float64 = mean(abs2, err)
+    β, v
 end
-
+@code_warntype OLS(y, simulate_stochastic(ρ, σ, 10000))
 
 ## In this form, we use an AR(2) process of the first differences with an intercept as the auxiliary model.
 
@@ -97,11 +98,14 @@ lag_matrix(xs, ns, K = maximum(ns)) = hcat([lag(xs, n, K) for n in ns]...)
 
 @test lag_matrix(1:5, 1:3) == [3 2 1; 4 3 2]
 
+
+## yX1 and yX2 makes Xs of type ANY
 "first auxiliary regression y, X, meant to capture first differences"
 function yX1(zs, K)
     Δs = diff(zs)
     lag(Δs, 0, K), hcat(lag_matrix(Δs, 1:K, K), ones(length(Δs)-K), lag(zs, 1, K+1))
 end
+@code_warntype yX1(simulate_stochastic(ρ, σ, 10000), 2)
 
 "second auxiliary regression y, X, meant to capture levels"
 function yX2(zs, K)
@@ -109,21 +113,24 @@ function yX2(zs, K)
 end
 
 function bridge_trans(dist::Distribution{Univariate,Continuous})
-    supp = support(dist)
+    supp::Distributions.RealInterval = support(dist)
     bridge(ℝ, minimum(supp) .. maximum(supp))
 end
 
 parameter_transformations(pp::Toy_Vol_Problem) = bridge_trans.([pp.prior_ρ, pp.prior_σ])
+## bridge has end of type ANY
+@code_warntype parameter_transformations(pp)
 
 function logdensity(pp::Toy_Vol_Problem, θ)
     @unpack ys, prior_ρ, prior_σ, ν, ϵ = pp
     trans = parameter_transformations(pp)
 
-    value_and_logjac = [t(raw_θ, LOGJAC) for (t, raw_θ) in zip(trans, θ)]
+    value_and_logjac::Float64 = [t(raw_θ, LOGJAC) for (t, raw_θ) in zip(trans, θ)]
 
-    ρ, σ = first.(value_and_logjac)
+    par::Vector{Float64}= first.(value_and_logjac)
+    ρ, σ = par
     N = length(ϵ)
-    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
+    logprior::Float64 = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
 
     # Generating xs, which is the latent volatility process
 
@@ -133,12 +140,19 @@ function logdensity(pp::Toy_Vol_Problem, θ)
 
     # We work with first differences
     y₁, X₁ = yX1(ys, 2)
-    log_likelihood1 = sum(logpdf.(Normal(0, √v₁), y₁ - X₁ * β₁))
+    log_likelihood1::Float64 = sum(logpdf.(Normal(0, √v₁), y₁ - X₁ * β₁))
     y₂, X₂ = yX2(ys, 2)
-    log_likelihood2 = sum(logpdf.(Normal(0, √v₂), y₂ - X₂ * β₂))
+    log_likelihood2::Float64 = sum(logpdf.(Normal(0, √v₂), y₂ - X₂ * β₂))
     logprior + log_likelihood1 + log_likelihood2
 
 end
+
+@code_warntype logdensity(pp, θ₀)
+## problem is with :
+# yX1, yX2 -> X₁, X₂ is of type ANY
+# trans is ANY
+
+
 
 # Trial
 ρ = 0.8
@@ -146,15 +160,16 @@ end
 y = simulate_stochastic(ρ, σ, 10000)
 pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), 10000)
 
+typeof(support(Uniform(-1, 1)))
 θ₀ = [inv(t)(param) for (t,param) in zip(parameter_transformations(pp), [ρ, σ])]
 
 ## profiling
 logdensity(pp, θ₀)
 Profile.clear()
-@profile logdensity(pp, θ₀)
+@profile [logdensity(pp, θ₀) for i in 1:100];
 ProfileView.view()
 
-
+@code_warntype simulate_stochastic(ρ, σ, 10000)
 
 
 
