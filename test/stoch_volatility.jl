@@ -39,7 +39,7 @@ end
 
 simulate_stochastic(ρ, σ, N) = simulate_stochastic(ρ, σ, rand(Chisq(1), N), randn(N))
 
-typeof(simulate_stochastic(1.0, 2.0, zeros(10), zeros(10))[1])
+
 @code_warntype simulate_stochastic(Dual(1.0,2.0), Dual(2.0,1.0),
                                    zeros(10), zeros(10))
 
@@ -111,7 +111,7 @@ lag(xs, n, K) = xs[((K+1):end)-n]
 """
     lag_matrix(xs, ns, K = maximum(ns))
 
-Matrix with differently lagged xs. 
+Matrix with differently lagged xs.
 """
 function lag_matrix(xs, ns, K = maximum(ns))
     M = Matrix{eltype(xs)}(length(xs)-K, maximum(ns))
@@ -143,8 +143,13 @@ function yX2(zs, K)
 end
 
 ## yX2 is type-stable as well now
-@code_warntype yX2(simulate_stochastic(1.0, 2.0, zeros(10), zeros(10)), 2)
+@code_warntype yX1(simulate_stochastic(1.0, 2.0, zeros(10), zeros(10)), 2)
 @code_warntype yX1(simulate_stochastic(Dual(1.0,2.0),Dual(2.0,1.0), zeros(10), zeros(10)), 2)
+
+## OLS(yX2()...) gives a type stable output
+@code_warntype OLS(yX2(simulate_stochastic(1.0, 2.0, zeros(10), zeros(10)), 2)...)
+@code_warntype OLS(yX2(simulate_stochastic(Dual(1.0,2.0),Dual(2.0,1.0), zeros(10), zeros(10)), 2)...)
+
 
 function bridge_trans(dist::Distribution{Univariate,Continuous})
     supp = support(dist)
@@ -164,7 +169,6 @@ function logdensity(pp::Toy_Vol_Problem, θ)
     par= first.(value_and_logjac)
     ρ, σ = par
     N = length(ϵ)
-    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
 
     # Generating xs, which is the latent volatility process
 
@@ -175,15 +179,14 @@ function logdensity(pp::Toy_Vol_Problem, θ)
     # We work with first differences
     y₁, X₁ = yX1(ys, 2)
     log_likelihood1 = sum(logpdf.(Normal(0, √v₁), y₁ - X₁ * β₁))
+    logprior = Vector{eltype(log_likelihood1)}(1)
+    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
     y₂, X₂ = yX2(ys, 2)
     log_likelihood2 = sum(logpdf.(Normal(0, √v₂), y₂ - X₂ * β₂))
     logprior + log_likelihood1 + log_likelihood2
 
 end
 
-@code_warntype logdensity(pp, θ₀)
-## problem is with :
-# trans is ANY
 
 
 
@@ -196,6 +199,11 @@ pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), 10000)
 typeof(support(Uniform(-1, 1)))
 θ₀ = [inv(t)(param) for (t,param) in zip(parameter_transformations(pp), [ρ, σ])]
 
+@code_native logdensity(pp, θ₀)
+@code_warntype logdensity(pp, θ₀)
+## problem is with :
+# trans is ANY
+
 ## profiling
 logdensity(pp, θ₀)
 Profile.clear()
@@ -205,10 +213,6 @@ ProfileView.view()
 ProfileView.view()
 @code_warntype simulate_stochastic(ρ, σ, 10000)
 
-
-
-
-
 ## with Forward mode AD
 loggradient(pp::Toy_Vol_Problem, x) = ForwardDiff.gradient(y->logdensity(pp, y), x)
 loggradient(pp, θ₀)
@@ -217,9 +221,47 @@ loggradient_rev(pp::Toy_Vol_Problem, x) = ReverseDiff.gradient(y->logdensity(pp,
 loggradient_rev(pp, θ₀)
 ## seems like both work AND results are close from the two methods!!!!!
 
+
+
+
+function logdensity(pp::Toy_Vol_Problem, θ)
+    @unpack ys, prior_ρ, prior_σ, ν, ϵ = pp
+
+    ρ, σ = θ
+    N = length(ϵ)
+
+    # Generating xs, which is the latent volatility process
+
+    zs = simulate_stochastic(ρ, σ, ϵ, ν)
+    β₁, v₁ = OLS(yX1(zs, 2)...)
+    β₂, v₂ = OLS(yX2(zs, 2)...)
+
+    # We work with first differences
+    y₁, X₁ = yX1(ys, 2)
+    log_likelihood1 = sum(logpdf.(Normal(0, √v₁), y₁ - X₁ * β₁))
+    logprior = Vector{eltype(log_likelihood1)}(1)
+    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ)
+    y₂, X₂ = yX2(ys, 2)
+    log_likelihood2 = sum(logpdf.(Normal(0, √v₂), y₂ - X₂ * β₂))
+    logprior + log_likelihood1 + log_likelihood2
+
+end
+
+@code_native logdensity(pp, θ₀)
+@code_warntype logdensity(pp, θ₀)
+## in this form without the transformation, logprior breaks the
+## type-stability!!
+
+
+## with Forward mode AD
+loggradient(pp, [ρ, σ])
+## with reverse mode AD
+loggradient_rev(pp, [ρ, σ])
+
+
 ## length, pp does not have an element such that i could get hold of the length of the parameter vector
 Base.length(::Toy_Vol_Problem) = 2.0
 ## defining RNG
 const RNG = srand(UInt32[0x23ef614d, 0x8332e05c, 0x3c574111, 0x121aa2f4])
 ## problem with RNG, error message: no method matching randn(::MersenneTwister, ::Float64)
-sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 1000; q = θ₀)
+sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 1000; q = [0.1, 0.9])
