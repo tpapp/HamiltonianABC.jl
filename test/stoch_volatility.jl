@@ -39,22 +39,20 @@ end
 
 simulate_stochastic(ρ, σ, N) = simulate_stochastic(ρ, σ, rand(Chisq(1), N), randn(N))
 
-
 @code_warntype simulate_stochastic(Dual(1.0,2.0), Dual(2.0,1.0),
                                    zeros(10), zeros(10))
 
-
-struct Toy_Vol_Problem
+struct Toy_Vol_Problem{T, Prior_ρ, Prior_σ}
     "observed data"
-    ys::Vector{Float64}
+    ys::Vector{T}
     "prior for ρ (persistence)"
-    prior_ρ::Distribution{Univariate,Continuous}
+    prior_ρ::Prior_ρ
     "prior for σ_v (volatility of volatility)"
-    prior_σ::Distribution{Univariate,Continuous}
+    prior_σ::Prior_σ
     "χ^2 draws for simulation"
-    ϵ::Vector{Float64}
+    ϵ::Vector{T}
     "Normal(0,1) draws for simulation"
-    ν::Vector{Float64}
+    ν::Vector{T}
 end
 
 """
