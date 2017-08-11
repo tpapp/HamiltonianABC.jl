@@ -148,14 +148,13 @@ end
 @code_warntype OLS(yX2(simulate_stochastic(1.0, 2.0, zeros(10), zeros(10)), 2)...)
 @code_warntype OLS(yX2(simulate_stochastic(Dual(1.0,2.0),Dual(2.0,1.0), zeros(10), zeros(10)), 2)...)
 
+bridge_trans(dist::Uniform) = bridge(ℝ, Segment(dist.a, dist.b))
+bridge_trans(dist::InverseGamma) = bridge(ℝ, ℝ⁺)
 
-function bridge_trans(dist::Distribution{Univariate,Continuous})
-    supp = support(dist)
-    bridge(ℝ, minimum(supp) .. maximum(supp))
-end
+@code_warntype bridge_trans(pp.prior_ρ)
+@code_warntype bridge_trans(pp.prior_σ)
 
-parameter_transformations(pp::Toy_Vol_Problem) = bridge_trans.([pp.prior_ρ, pp.prior_σ])
-## bridge has end of type ANY
+parameter_transformations(pp::Toy_Vol_Problem) = bridge_trans.((pp.prior_ρ, pp.prior_σ))
 @code_warntype parameter_transformations(pp)
 
 function logdensity(pp::Toy_Vol_Problem, θ)
