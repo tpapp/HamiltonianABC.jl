@@ -30,10 +30,10 @@ function simulate_stochastic(ρ, σ, ϵs, νs)
     N = length(ϵs)
     @argcheck N == length(νs)
     x₀ = νs[1]*σ*(1 - ρ^2)^(-0.5)
-    xs = Vector{typeof(x₀)}(N)
-    for i in 1:N
-        xs[i] = (i == 1) ? x₀ : (ρ*xs[i-1] + σ*νs[i])
-    end
+    xs = Vector{typeof(x₀)}(N)
+    for i in 1:N
+        xs[i] = (i == 1) ? x₀ : (ρ*xs[i-1] + σ*νs[i])
+    end
     xs + log.(ϵs) + 1.27
 end
 
@@ -41,7 +41,7 @@ simulate_stochastic(ρ, σ, N) = simulate_stochastic(ρ, σ, rand(Chisq(1), N), 
 
 
 @code_warntype simulate_stochastic(Dual(1.0,2.0), Dual(2.0,1.0),
-                                   zeros(10), zeros(10))
+                                   zeros(10), zeros(10))
 
 
 struct Toy_Vol_Problem
@@ -84,10 +84,10 @@ end
 Take in the dependant variable (y) and the regressor (x), give back the estimated coefficients (β) and the variance (v).
 """
 function OLS(y, x)
-    β = x \ y
-    err = y - x * β
-    v = mean(abs2, err)
-    β, v
+    β = x \ y
+    err = y - x * β
+    v = mean(abs2, err)
+    β, v
 end
 
 @code_warntype OLS(ones(3), ones(3,3))
