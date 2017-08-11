@@ -161,10 +161,12 @@ function logdensity(pp::Toy_Vol_Problem, θ)
     @unpack ys, prior_ρ, prior_σ, ν, ϵ = pp
     trans = parameter_transformations(pp)
 
-    value_and_logjac = [t(raw_θ, LOGJAC) for (t, raw_θ) in zip(trans, θ)]
-
+    value_and_logjac = map((t, raw_θ) -> t(raw_θ, LOGJAC), trans, θ)
     par= first.(value_and_logjac)
     ρ, σ = par
+    
+    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
+
     N = length(ϵ)
 
     # Generating xs, which is the latent volatility process
@@ -176,16 +178,10 @@ function logdensity(pp::Toy_Vol_Problem, θ)
     # We work with first differences
     y₁, X₁ = yX1(ys, 2)
     log_likelihood1 = sum(logpdf.(Normal(0, √v₁), y₁ - X₁ * β₁))
-    logprior = Vector{eltype(log_likelihood1)}(1)
-    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
     y₂, X₂ = yX2(ys, 2)
     log_likelihood2 = sum(logpdf.(Normal(0, √v₂), y₂ - X₂ * β₂))
     logprior + log_likelihood1 + log_likelihood2
-
 end
-
-
-
 
 # Trial
 ρ = 0.8
