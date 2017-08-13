@@ -34,13 +34,17 @@ plotlyjs()                      # Tamas likes this, optional
 
 ## Only X_t is exogenous in this model, Y_t and C_t are endogenous
 
+##############################################################################
+## Functions needed for the model
+##############################################################################
+
 "an array of ForwardDiff.Dual, for testing type stability"
 duals(dims...) = fill(Dual(1.0, 2.0), dims...)
 
 """
     simulate_simultaneous(β, X, us)
 
-Take in the prameter (β), X and errors us, give back the endogenous variables of the system (Y and C).
+Take in the parameter β, X and errors us, give back the endogenous variables of the system (Y and C).
 """
 function simulate_simultaneous(β, X, us)
     N = length(us)
@@ -50,25 +54,22 @@ function simulate_simultaneous(β, X, us)
     return (C, Y)
 end
 
-# type-stable, works fine
-@code_warntype simulate_simultaneous(0.8, ones(5), randn(5))
-@code_warntype simulate_simultaneous(0.8, duals(5), duals(5))
 
-struct ToySimultaneousModel
+struct ToySimultaneousModel{T, Prior_β, Dist_x, Dist_us}
     "observed consumption"
-    Cs::Vector{Float64}
+    Cs::Vector{T}
     "observed output"
-    Ys::Vector{Float64}
+    Ys::Vector{T}
     "non-comsumption"
-    Xs::Vector{Float64}
+    Xs::Vector{T}
     "distribution of Xs"
-    dist_x::Distribution{Univariate,Continuous}
+    dist_x::Dist_x
     "prior for β"
-    prior_β::Distribution{Univariate,Continuous}
+    prior_β::Prior_β
     "Normal(0,τ) draws for simulation, where τ is fixed"
-    us::Vector{Float64}
+    us::Vector{T}
     "distribution of us"
-    dist_us::Distribution{Univariate,Continuous}
+    dist_us::Dist_us
 end
 
 
@@ -94,9 +95,6 @@ function OLS(y, x)
     β, σ_2
 end
 
-@code_warntype OLS(ones(3), ones(3,3))
-@code_warntype OLS(duals(3), duals(3,3))
-
 """
     simulate!(pp::ToySimultaneousModel)
 
@@ -110,41 +108,75 @@ end
 
 
 
-function bridge_trans(dist::Distribution{Univariate,Continuous})
-    supp = support(dist)
-    bridge(ℝ, minimum(supp) .. maximum(supp))
-end
+bridge_trans(dist::Uniform) = bridge(ℝ, Segment(dist.a, dist.b))
 
 ## logdensity uses the following auxiliary model:
 ## C_t ∼  N(β_1 + β_2 * X_t, √σ_2)
 
 function logdensity(pp::ToySimultaneousModel, β)
     @unpack Cs, Ys, Xs, prior_β, us = pp
-    #trans = bridge_trans(prior_β)
-    #value_and_logjac = trans(β, LOGJAC)
-    #β = first(value_and_logjac)
-    logprior = logpdf(prior_β, β[1])# + last(value_and_logjac)
+    trans = bridge_trans(prior_β)
+    value_and_logjac = trans(β, LOGJAC)
+    β = first(value_and_logjac)
+    logprior = logpdf(prior_β, β[1]) + last(value_and_logjac)
     Ones = ones(length(us))
     ## Generating the data
     C, Y = simulate_simultaneous(β[1], Xs, us)
     # OLs estimatation, regressing C on [1 X]
-    est, σ_2 = OLS(C, [Ones (Y - C)])
+    XX = hcat(Ones, Y-C)
+    est, σ_2 = OLS(C, XX)
 
     log_likelihood = sum(logpdf.(Normal(0, √σ_2), Cs - [ones(length(Cs)) Ys-Cs] * est))
     return(logprior + log_likelihood)
 end
 
 
-# Trial
+#################################################################################
+## Toymodel
+#################################################################################
+
 β = 0.9
-β₀ = inv(bridge_trans(pp.prior_β))(β)#0.9
 C, Y = simulate_simultaneous(β, rand(Normal(100, 3), 100), rand(Normal(0, 5), 100))
 pp = ToySimultaneousModel(C, Y, Uniform(0, 1), Normal(100, 3), Normal(0, 5), 1000)
-# works fine
-@code_warntype logdensity(pp, β)
+β₀ = inv(bridge_trans(pp.prior_β))(β)
+
+
 ## loggradient with ForwardDiff
 loggradient(pp::ToySimultaneousModel, x) = ForwardDiff.derivative(y->logdensity(pp, y), x)
-loggradient(pp, β)
+loggradient(pp, [β₀])
 ## with ReverseDiff
-loggradient_(pp::ToySimultaneousModel, x) = ReverseDiff.deriv(y->logdensity(pp, y), x)
-loggradient_(pp, [β])
+#loggradient_(pp::ToySimultaneousModel, x) = ReverseDiff.deriv(y->logdensity(pp, y), x)
+#loggradient_(pp, [β])
+
+Base.length(::Toy_Vol_Problem) = 1.0
+## defining RNG
+const RNG = srand(UInt32[0x23ef614d, 0x8332e05c, 0x3c574111, 0x121aa2f4])
+
+sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 1000; q = β₀)
+
+NN = ceil(Int, length(sample) - (size(sample,1)) * 0.5 )
+sample_ρ = Vector(NN)
+for i in 1:NN
+sample_β[i] = [t(param) for (t,param) in zip(bridge_trans(pp.prior_β), sample[i+NN].q)]
+end
+
+plt = plot(density(sample_β), label = "posterior", title = "β")
+plot!(plt, a -> pdf(pp.prior_β, a), linspace(0, 1, 100), label = "prior")
+vline!(plt, [β], label = "true value")
+
+
+
+#################################################################################
+## type-stability
+#################################################################################
+
+
+# type-stable, works fine
+@code_warntype simulate_simultaneous(0.8, ones(5), randn(5))
+@code_warntype simulate_simultaneous(0.8, duals(5), duals(5))
+
+@code_warntype OLS(ones(3), ones(3,3))
+@code_warntype OLS(duals(3), duals(3,3))
+
+## type-stable
+@code_warntype logdensity(pp, β)

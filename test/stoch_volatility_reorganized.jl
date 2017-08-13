@@ -119,12 +119,12 @@ end
 "first auxiliary regression y, X, meant to capture first differences"
 function yX1(zs, K)
     Δs = diff(zs)
-    lag(Δs, 0, K), hcat(lag_matrix(Δs, 1:K, K), ones(length(Δs)-K), lag(zs, 1, K+1))
+    lag(Δs, 0, K), hcat(lag_matrix(Δs, 1:K, K), ones(eltype(zs), length(Δs)-K), lag(zs, 1, K+1))
 end
 
 "second auxiliary regression y, X, meant to capture levels"
 function yX2(zs, K)
-    lag(zs, 0, K), hcat(ones(length(zs)-K), lag_matrix(zs, 1:K, K))
+    lag(zs, 0, K), hcat(ones(eltype(zs), length(zs)-K), lag_matrix(zs, 1:K, K))
 end
 
 bridge_trans(dist::Uniform) = bridge(ℝ, Segment(dist.a, dist.b))
@@ -137,7 +137,7 @@ function logdensity(pp::Toy_Vol_Problem, θ)
     trans = parameter_transformations(pp)
 
     value_and_logjac = map((t, raw_θ) -> t(raw_θ, LOGJAC), trans, θ)
-    par= first.(value_and_logjac)
+    par = first.(value_and_logjac)
     ρ, σ = par
 
     logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
@@ -255,11 +255,12 @@ lag_matrix(1:5, 1:3) == [3 2 1; 4 3 2]
 
 ## profiling
 Profile.clear()
-@profile [logdensity(pp, θ₀) for i in 1:100];
+f(N = 10000) = for _ in 1:N logdensity(pp, θ₀) end
+f(1)                            # don't capture compilation
+@profile f(10000)
 ProfileView.view()
 Profile.clear()
-@profile [simulate_stochastic(ρ, σ, 10000) for i in 1:100];
-ProfileView.view()
+
 
 ### ISSUE
 ## We see a lot of red, but they point at different julia files, i.e. inference.jl, array.jl, etc...
