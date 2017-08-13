@@ -143,19 +143,19 @@ pp = ToySimultaneousModel(C, Y, Uniform(0, 1), Normal(100, 3), Normal(0, 5), 100
 
 ## loggradient with ForwardDiff
 loggradient(pp::ToySimultaneousModel, x) = ForwardDiff.derivative(y->logdensity(pp, y), x)
-loggradient(pp, [β₀])
+loggradient(pp, β₀)
 ## with ReverseDiff
 #loggradient_(pp::ToySimultaneousModel, x) = ReverseDiff.deriv(y->logdensity(pp, y), x)
 #loggradient_(pp, [β])
 
-Base.length(::Toy_Vol_Problem) = 1.0
+Base.length(::ToySimultaneousModel) = 1.0
 ## defining RNG
 const RNG = srand(UInt32[0x23ef614d, 0x8332e05c, 0x3c574111, 0x121aa2f4])
 
-sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 1000; q = β₀)
+sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 1000)
 
 NN = ceil(Int, length(sample) - (size(sample,1)) * 0.5 )
-sample_ρ = Vector(NN)
+sample_β = Vector(NN)
 for i in 1:NN
 sample_β[i] = [t(param) for (t,param) in zip(bridge_trans(pp.prior_β), sample[i+NN].q)]
 end
