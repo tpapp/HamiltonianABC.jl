@@ -158,6 +158,44 @@ function logdensity(pp::Toy_Vol_Problem, θ)
     logprior + log_likelihood1 + log_likelihood2
 end
 
+"""
+    ρ̂ ₜ = Variogram(xs, j, var)
+
+Give back the estimated autocorrelation given by equation (11.7) in Gelman et al. 2014, Bayesian Data Analysis, Third Edition.
+"""
+function Variogram(xs, j, var)
+    xs_ = lag(xs, j, j)
+    xs_t = lag(xs, 0, j)
+    1 - mean(abs2,(xs_ - xs_t))/ (2 * var)
+end
+
+
+"""
+    ESS(xs, var = var(xs))
+
+Give back the estimated effective sample size given by equation (11.8) in Gelman et al.
+If not specifically given, variance is calculated from xs.
+"""
+function  ESS(xs, var = var(xs))
+    N = length(xs)
+    # starting from lag 0
+    ϕ_t = 1 + 2 * Variogram(xs, 1, var)
+    J = 1
+    ## continuing until the sum of autocorrelation estimates for two successive lags is negative
+    ## following Gelman et al. at page 287.
+    while J < (N -2)
+        dif = Variogram(xs, (2*J), var) + Variogram(xs, (2*J+1), var)
+        if dif < 0
+            break
+        else
+            ϕ_t += 2 * dif
+            J += 1
+        end
+    end
+    # mn / (1 + 2*Σᵀ ρₜ) is the result
+    N / ϕ_t
+end
+
 ## with Forward mode AD
 loggradient(pp::Toy_Vol_Problem, x) = ForwardDiff.gradient(y->logdensity(pp, y), x)
 ## with reverse mode AD, NOT WORKING RIGHT NOW
@@ -178,18 +216,18 @@ pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), 10000)
 ## checking whether the two types of loggradient functions work,
 ## right now, reversediff.gradient does not work
 loggradient(pp, θ₀)
-loggradient_rev(pp, θ₀)
+#loggradient_rev(pp, θ₀)
 
 ## length, pp does not have an element such that i could get hold of the length of the parameter vector
-Base.length(::Toy_Vol_Problem) = 2.0
+Base.length(::Toy_Vol_Problem) = 2
 ## defining RNG
 const RNG = srand(UInt32[0x23ef614d, 0x8332e05c, 0x3c574111, 0x121aa2f4])
 
-sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 1000; q = θ₀)
+sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 3000; q = θ₀)
 ## transfomring back the sample
 NN = ceil(Int, length(sample) - (size(sample,1)) * 0.5 )
-sample_ρ = Vector(NN)
-sample_σ = Vector(NN)
+sample_ρ = Vector{Float64}(NN)
+sample_σ = Vector{Float64}(NN)
 for i in 1:NN
 sample_ρ[i], sample_σ[i] = [t(param) for (t,param) in zip(parameter_transformations(pp), sample[i+NN].q)]
 end
@@ -204,8 +242,9 @@ vline!(lt, [σ], label = "true value")
 
 ## priors do not really have an impact on posterior.
 
-
-
+## Effective sample size
+ESS(sample_ρ)
+ESS(sample_σ)
 
 
 ###############################################################################
@@ -247,6 +286,14 @@ lag_matrix(1:5, 1:3) == [3 2 1; 4 3 2]
 
 @code_native logdensity(pp, θ₀)
 @code_warntype logdensity(pp, θ₀)
+
+
+### testing the results
+
+@testset "NUTS sample" begin
+    @test mean(sample_ρ) ≈ ρ atol= 0.1
+    @test mean(sample_σ) ≈ σ atol= 0.1
+end
 
 ###############################################################################
 ## Profiling and Benchmarking

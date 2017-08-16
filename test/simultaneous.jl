@@ -148,7 +148,7 @@ loggradient(pp, β₀)
 #loggradient_(pp::ToySimultaneousModel, x) = ReverseDiff.deriv(y->logdensity(pp, y), x)
 #loggradient_(pp, [β])
 
-Base.length(::ToySimultaneousModel) = 1.0
+Base.length(::ToySimultaneousModel) = 1
 ## defining RNG
 const RNG = srand(UInt32[0x23ef614d, 0x8332e05c, 0x3c574111, 0x121aa2f4])
 
