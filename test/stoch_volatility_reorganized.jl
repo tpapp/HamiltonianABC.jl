@@ -10,14 +10,16 @@ using ForwardDiff
 using ReverseDiff
 using Plots
 using ContinuousTransformations
+import ContinuousTransformations: transformation_to
 using ProfileView
 import ForwardDiff: Dual
 using BenchmarkTools
 plotlyjs()
+using MCMCDiagnostics
 
-###############################################################################################################
+######################################################################
 ## Functions needed for the model
-###################################################################################
+######################################################################
 
 """
     simulate_stochastic(ρ, σ_v, ϵs, νs)
@@ -127,77 +129,36 @@ function yX2(zs, K)
     lag(zs, 0, K), hcat(ones(eltype(zs), length(zs)-K), lag_matrix(zs, 1:K, K))
 end
 
-bridge_trans(dist::Uniform) = bridge(ℝ, Segment(dist.a, dist.b))
-bridge_trans(dist::InverseGamma) = bridge(ℝ, ℝ⁺)
+transformation_to(dist::Uniform) = transformation_to(Segment(dist.a, dist.b))
+transformation_to(::InverseGamma) = transformation_to(ℝ⁺)
 
-parameter_transformations(pp::Toy_Vol_Problem) = bridge_trans.((pp.prior_ρ, pp.prior_σ))
+transformation_to(pp::Toy_Vol_Problem) =
+    TransformationTuple(transformation_to.((pp.prior_ρ, pp.prior_σ)))
 
 function logdensity(pp::Toy_Vol_Problem, θ)
+    print(eltype(θ) == Float64 ? "." : "_")
     @unpack ys, prior_ρ, prior_σ, ν, ϵ = pp
-    trans = parameter_transformations(pp)
-
-    value_and_logjac = map((t, raw_θ) -> t(raw_θ, LOGJAC), trans, θ)
-    par = first.(value_and_logjac)
-    ρ, σ = par
-
-    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ) + sum(last, value_and_logjac)
-
-    N = length(ϵ)
+    trans = transformation_to(pp)
+    ρ, σ = trans(θ)
+    logprior = logpdf(prior_ρ, ρ) + logpdf(prior_σ, σ)
 
     # Generating xs, which is the latent volatility process
-
     zs = simulate_stochastic(ρ, σ, ϵ, ν)
     β₁, v₁ = OLS(yX1(zs, 2)...)
     β₂, v₂ = OLS(yX2(zs, 2)...)
 
-    # We work with first differences
+    # first differences
     y₁, X₁ = yX1(ys, 2)
     log_likelihood1 = sum(logpdf.(Normal(0, √v₁), y₁ - X₁ * β₁))
+    # levels
     y₂, X₂ = yX2(ys, 2)
     log_likelihood2 = sum(logpdf.(Normal(0, √v₂), y₂ - X₂ * β₂))
-    logprior + log_likelihood1 + log_likelihood2
-end
-
-"""
-    ρ̂ ₜ = Variogram(xs, j, var)
-
-Give back the estimated autocorrelation given by equation (11.7) in Gelman et al. 2014, Bayesian Data Analysis, Third Edition.
-"""
-function Variogram(xs, j, var)
-    xs_ = lag(xs, j, j)
-    xs_t = lag(xs, 0, j)
-    1 - mean(abs2,(xs_ - xs_t))/ (2 * var)
-end
-
-
-"""
-    ESS(xs, var = var(xs))
-
-Give back the estimated effective sample size given by equation (11.8) in Gelman et al.
-If not specifically given, variance is calculated from xs.
-"""
-function  ESS(xs, var = var(xs))
-    N = length(xs)
-    # starting from lag 0
-    ϕ_t = 1 + 2 * Variogram(xs, 1, var)
-    J = 1
-    ## continuing until the sum of autocorrelation estimates for two successive lags is negative
-    ## following Gelman et al. at page 287.
-    while J < (N -2)
-        dif = Variogram(xs, (2*J), var) + Variogram(xs, (2*J+1), var)
-        if dif < 0
-            break
-        else
-            ϕ_t += 2 * dif
-            J += 1
-        end
-    end
-    # mn / (1 + 2*Σᵀ ρₜ) is the result
-    N / ϕ_t
+    logprior + log_likelihood1 + log_likelihood2 + logjac(trans, θ)
 end
 
 ## with Forward mode AD
-loggradient(pp::Toy_Vol_Problem, x) = ForwardDiff.gradient(y->logdensity(pp, y), x)
+loggradient(pp::Toy_Vol_Problem, x) =
+    ForwardDiff.gradient(y->logdensity(pp, y), x)::Vector{Float64}
 ## with reverse mode AD, NOT WORKING RIGHT NOW
 ## ISSUE : there is a problem with line 139, i will look into it
 loggradient_rev(pp::Toy_Vol_Problem, x) = ReverseDiff.gradient(y->logdensity(pp, y), x)
@@ -211,11 +172,17 @@ loggradient_rev(pp::Toy_Vol_Problem, x) = ReverseDiff.gradient(y->logdensity(pp,
 y = simulate_stochastic(ρ, σ, 10000)
 pp = Toy_Vol_Problem(y, Uniform(-1, 1), InverseGamma(1, 1), 10000)
 
-θ₀ = [inv(t)(param) for (t,param) in zip(parameter_transformations(pp), [ρ, σ])]
+θ₀ = [inverse(transformation_to(pp), [ρ, σ])...]
+
+## check type stability
+@code_warntype logdensity(pp, θ₀)
+@code_warntype loggradient(pp, θ₀)
+Base.Test.@inferred loggradient(pp, θ₀)
+
 
 ## checking whether the two types of loggradient functions work,
 ## right now, reversediff.gradient does not work
-loggradient(pp, θ₀)
+@code_warntype loggradient(pp, θ₀)
 #loggradient_rev(pp, θ₀)
 
 ## length, pp does not have an element such that i could get hold of the length of the parameter vector
@@ -223,14 +190,12 @@ Base.length(::Toy_Vol_Problem) = 2
 ## defining RNG
 const RNG = srand(UInt32[0x23ef614d, 0x8332e05c, 0x3c574111, 0x121aa2f4])
 
-sample, tuned_sample = NUTS_tune_and_mcmc(RNG, pp, 3000; q = θ₀)
-## transfomring back the sample
-NN = ceil(Int, length(sample) - (size(sample,1)) * 0.5 )
-sample_ρ = Vector{Float64}(NN)
-sample_σ = Vector{Float64}(NN)
-for i in 1:NN
-sample_ρ[i], sample_σ[i] = [t(param) for (t,param) in zip(parameter_transformations(pp), sample[i+NN].q)]
-end
+sample, tuned_sampler = NUTS_tune_and_mcmc(RNG, pp, 1000; q = θ₀)
+
+raw_posterior = variable_matrix(sample)
+
+sample_ρ = transformation_to(pp)[1].(raw_posterior[:, 1])
+sample_σ = transformation_to(pp)[2].(raw_posterior[:, 2])
 
 plt = plot(density(sample_ρ), label = "posterior", title = "ρ")
 plot!(plt, a -> pdf(pp.prior_ρ, a), linspace(-1, 1, 100), label = "prior")
@@ -243,8 +208,8 @@ vline!(lt, [σ], label = "true value")
 ## priors do not really have an impact on posterior.
 
 ## Effective sample size
-ESS(sample_ρ)
-ESS(sample_σ)
+effective_sample_size(sample_ρ)
+effective_sample_size(sample_σ)
 
 
 ###############################################################################
