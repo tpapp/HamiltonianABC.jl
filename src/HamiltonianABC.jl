@@ -69,7 +69,7 @@ Return the vector of parameters, and the average acceptance rate.
 The following interface needs to be supported by the arguments: -
 `logposterior(model, θ)`, `simulate!(model)`.
 """
-function mcmc{T}(transition, model, θ::T, N)
+function mcmc(transition, model, θ::T, N) where T
     chain = Vector{T}(N)
     as = Vector{Float64}(N)
     for i in 1:N
